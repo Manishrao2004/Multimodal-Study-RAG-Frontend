@@ -1,0 +1,31 @@
+/* Keep brand/action surfaces dark even though the semantic `ink` text token
+   becomes light in dark mode. Interactive state utilities need explicit
+   dark selectors because their generated class names include the state. */
+.dark .bg-ink {
+  background-color: #081820;
+}
+
+.dark .hover\:bg-ink\/90:hover {
+  background-color: #102832;
+}
+
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-white:hover,
+.dark .hover\:bg-white\/60:hover {
+  background-color: #122a34;
+}
+
+.dark .focus\:bg-white:focus {
+  background-color: var(--card);
+}
+
+.dark [data-slot="select-trigger"],
+.dark [data-slot="button"][data-variant="outline"],
+.dark [data-slot="toggle"][data-variant="outline"] {
+  background-color: var(--card);
+}
+
+.dark [data-slot="button"][data-variant="default"].bg-ink,
+.dark button.bg-ink {
+  color: #f4fbfb;
+}

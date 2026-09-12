@@ -1,0 +1,21 @@
+html,
+body {
+  min-height: 100%;
+}
+
+/* The application shell fills short viewports so the footer rests against the
+   bottom edge; long workspaces still expand and scroll normally. */
+.min-h-screen {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  flex-direction: column;
+}
+
+.min-h-screen > main {
+  flex: 1 0 auto;
+}
+
+.min-h-screen > footer {
+  margin-top: auto;
+}
