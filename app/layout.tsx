@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 
-import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
-import "./dark-fixes.css";
 import "./footer-layout.css";
 
 export const metadata: Metadata = {
@@ -18,9 +16,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <ThemeProvider>
-          {children}
-        </ThemeProvider>
+        {children}
       </body>
     </html>
   );

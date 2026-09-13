@@ -7,7 +7,6 @@ import {
   ChevronRight,
   Database,
   FileStack,
-  LayoutDashboard,
   Menu,
   MessageSquareText,
   RefreshCw,
@@ -22,7 +21,6 @@ import { cn } from "@/lib/utils";
 import { AskWorkspace } from "@/components/workbench/ask-workspace";
 import { LibraryWorkspace } from "@/components/workbench/library-workspace";
 import { StudyWorkspace } from "@/components/workbench/study-workspace";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -96,29 +94,10 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-canvas p-0 text-ink lg:p-6">
-      <div className="mx-auto min-h-screen max-w-[1440px] bg-white lg:grid lg:min-h-[calc(100vh-3rem)] lg:grid-cols-[238px_minmax(0,1fr)] lg:overflow-hidden lg:rounded-xl lg:border lg:border-line lg:shadow-[0_18px_54px_rgba(25,25,25,0.07)]">
-        <aside className="hidden border-r border-line bg-white p-5 lg:flex lg:flex-col">
-          <button type="button" onClick={() => chooseView("ask")} className="flex items-center gap-3 rounded-lg p-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan/40">
-            <span className="flex size-10 items-center justify-center rounded-lg bg-ink text-white"><BrainCircuit className="size-5" /></span>
-            <span><span className="block text-[15px] font-bold tracking-[-0.02em]">Verity Study</span><span className="block text-xs text-ink-muted">Study workspace</span></span>
-          </button>
-          <p className="mt-9 px-2 text-xs font-medium uppercase tracking-wide text-ink-faint">Workspace</p>
-          <nav aria-label="Primary navigation" className="mt-3 space-y-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              return <button key={item.id} type="button" onClick={() => chooseView(item.id)} className={cn("flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium transition", view === item.id ? "bg-ink text-white" : "text-ink-muted hover:bg-muted hover:text-ink")}><Icon className="size-4" />{item.label}</button>;
-            })}
-          </nav>
-          <div className="mt-auto rounded-lg border border-line bg-canvas p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold"><span className={cn("size-2 rounded-full", online ? "bg-emerald-500" : "bg-slate-300")} />{online ? "Study engine online" : "Study engine offline"}</div>
-            <p className="mt-2 text-xs leading-5 text-ink-muted">{stats?.documents ?? 0} sources · {stats?.chunks ?? 0} searchable chunks</p>
-          </div>
-        </aside>
-        <div className="min-w-0">
-      <header className="sticky top-0 z-40 border-b border-line bg-white/95 backdrop-blur-xl lg:static">
-        <div className="flex h-[68px] items-center px-4 sm:px-6 lg:px-8">
-          <button type="button" onClick={() => chooseView("ask")} className="group flex items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan/40 lg:hidden">
+    <div className="min-h-screen bg-canvas text-ink">
+      <header className="sticky top-0 z-40 border-b border-line/90 bg-white/95 backdrop-blur-xl">
+        <div className="mx-auto flex h-[72px] max-w-[1440px] items-center px-4 sm:px-6 lg:px-8">
+          <button type="button" onClick={() => chooseView("ask")} className="group flex items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan/40">
             <span className="relative flex size-10 items-center justify-center overflow-hidden rounded-[13px] bg-ink text-white shadow-[0_7px_16px_rgba(7,29,40,0.18)]">
               <BrainCircuit className="relative z-10 size-5" />
               <span className="absolute bottom-0 right-0 size-3 bg-cyan" />
@@ -129,9 +108,7 @@ export default function Home() {
             </span>
           </button>
 
-          <div className="hidden items-center gap-2 text-sm lg:flex"><LayoutDashboard className="size-4 text-ink-muted" /><span className="text-ink-muted">Workspace</span><ChevronRight className="size-3.5 text-ink-faint" /><strong>{navItems.find((item) => item.id === view)?.label}</strong></div>
-
-          <nav aria-label="Primary navigation" className="hidden">
+          <nav aria-label="Primary navigation" className="ml-10 hidden items-center gap-1 md:flex">
             {navItems.map((item) => {
               const Icon = item.icon;
               return (
@@ -141,7 +118,7 @@ export default function Home() {
                   onClick={() => chooseView(item.id)}
                   className={cn(
                     "flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition",
-                    view === item.id ? "bg-white text-ink shadow-[0_1px_0_rgba(8,31,43,0.08),0_6px_18px_rgba(8,31,43,0.05)]" : "text-ink-muted hover:bg-white/60 hover:text-ink",
+                    view === item.id ? "bg-ink text-white shadow-none" : "bg-white text-ink-muted hover:bg-muted hover:text-ink",
                   )}
                 >
                   <Icon className="size-4" /> {item.label}
@@ -167,20 +144,19 @@ export default function Home() {
               <Database className="size-4" />
               <span><strong className="font-mono text-ink">{stats?.documents ?? 0}</strong> sources</span>
             </button>
-            <ThemeToggle />
-            <Button variant="ghost" size="icon" onClick={() => setMobileOpen(true)} className="rounded-lg lg:hidden" aria-label="Open navigation"><Menu /></Button>
+            <Button variant="ghost" size="icon" onClick={() => setMobileOpen(true)} className="rounded-xl md:hidden" aria-label="Open navigation"><Menu /></Button>
           </div>
         </div>
       </header>
 
-      <main className="bg-canvas/45">
+      <main>
         {view === "ask" && <AskWorkspace indexReady={Boolean(stats?.index_ready)} />}
         {view === "library" && <LibraryWorkspace revision={revision} onLibraryChanged={() => setRevision((value) => value + 1)} />}
         {view === "study" && <StudyWorkspace revision={revision} />}
       </main>
 
-      <footer className="border-t border-line bg-white">
-        <div className="flex flex-col gap-2 px-6 py-4 text-xs text-ink-faint sm:flex-row sm:items-center sm:justify-between lg:px-8">
+      <footer className="border-t border-line bg-white/50">
+        <div className="mx-auto flex max-w-[1180px] flex-col gap-2 px-6 py-5 text-xs text-ink-faint sm:flex-row sm:items-center sm:justify-between">
           <span>Evidence-first study assistant · local, single-user workspace</span>
           <span className="font-mono">{API_BASE}</span>
         </div>
@@ -240,8 +216,6 @@ export default function Home() {
       </Sheet>
 
       <Toaster position="bottom-right" richColors closeButton />
-        </div>
-      </div>
     </div>
   );
 }
