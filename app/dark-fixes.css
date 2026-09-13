@@ -2,17 +2,17 @@
    becomes light in dark mode. Interactive state utilities need explicit
    dark selectors because their generated class names include the state. */
 .dark .bg-ink {
-  background-color: #081820;
+  background-color: #303330;
 }
 
 .dark .hover\:bg-ink\/90:hover {
-  background-color: #102832;
+  background-color: #3a3d3a;
 }
 
 .dark .hover\:bg-slate-50:hover,
 .dark .hover\:bg-white:hover,
 .dark .hover\:bg-white\/60:hover {
-  background-color: #122a34;
+  background-color: #292b29;
 }
 
 .dark .focus\:bg-white:focus {
@@ -27,5 +27,5 @@
 
 .dark [data-slot="button"][data-variant="default"].bg-ink,
 .dark button.bg-ink {
-  color: #f4fbfb;
+  color: #f4f4f1;
 }

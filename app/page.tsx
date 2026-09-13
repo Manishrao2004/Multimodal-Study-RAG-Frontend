@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { AskWorkspace } from "@/components/workbench/ask-workspace";
 import { LibraryWorkspace } from "@/components/workbench/library-workspace";
 import { StudyWorkspace } from "@/components/workbench/study-workspace";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -144,6 +145,7 @@ export default function Home() {
               <Database className="size-4" />
               <span><strong className="font-mono text-ink">{stats?.documents ?? 0}</strong> sources</span>
             </button>
+            <ThemeToggle />
             <Button variant="ghost" size="icon" onClick={() => setMobileOpen(true)} className="rounded-xl md:hidden" aria-label="Open navigation"><Menu /></Button>
           </div>
         </div>

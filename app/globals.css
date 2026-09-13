@@ -51,49 +51,49 @@
 
 .dark {
   color-scheme: dark;
-  --background: #07141a;
-  --foreground: #e9f4f5;
-  --card: #0c1d25;
-  --card-foreground: #e9f4f5;
-  --popover: #10242d;
-  --popover-foreground: #e9f4f5;
-  --primary: #58ced2;
-  --primary-foreground: #062027;
-  --secondary: #13303a;
-  --secondary-foreground: #9ce5e6;
-  --muted: #132832;
-  --muted-foreground: #9aabb2;
-  --accent: #16333e;
-  --accent-foreground: #dff8f8;
-  --destructive: #f06d73;
-  --border: #203742;
-  --input: #29444f;
-  --ring: #58ced2;
-  --chart-1: #58ced2;
-  --chart-2: #83e0b2;
-  --chart-3: #f2bd61;
-  --chart-4: #8ca8eb;
-  --chart-5: #ed858c;
-  --sidebar: #091a22;
-  --sidebar-foreground: #e9f4f5;
-  --sidebar-primary: #58ced2;
-  --sidebar-primary-foreground: #062027;
-  --sidebar-accent: #16333e;
-  --sidebar-accent-foreground: #dff8f8;
-  --sidebar-border: #203742;
-  --sidebar-ring: #58ced2;
-  --canvas: #07141a;
-  --ink: #e9f4f5;
-  --ink-muted: #9aabb2;
-  --ink-faint: #69808a;
-  --line: #203742;
-  --cyan: #43c2c7;
-  --cyan-deep: #75dade;
-  --cyan-light: #8be5e7;
-  --cyan-soft: #113139;
-  --grid: rgba(139, 229, 231, 0.028);
-  --selection: #20535d;
-  --selection-text: #efffff;
+  --background: #171918;
+  --foreground: #ececea;
+  --card: #202220;
+  --card-foreground: #ececea;
+  --popover: #272927;
+  --popover-foreground: #ececea;
+  --primary: #f0f0ed;
+  --primary-foreground: #202220;
+  --secondary: #292b29;
+  --secondary-foreground: #ececea;
+  --muted: #292b29;
+  --muted-foreground: #a8aaa6;
+  --accent: #1e342c;
+  --accent-foreground: #7ee0c2;
+  --destructive: #ef7d84;
+  --border: #343734;
+  --input: #3a3d3a;
+  --ring: #46c7a4;
+  --chart-1: #46c7a4;
+  --chart-2: #ececea;
+  --chart-3: #e6b550;
+  --chart-4: #9db2ee;
+  --chart-5: #ef8a90;
+  --sidebar: #202220;
+  --sidebar-foreground: #ececea;
+  --sidebar-primary: #f0f0ed;
+  --sidebar-primary-foreground: #202220;
+  --sidebar-accent: #292b29;
+  --sidebar-accent-foreground: #ececea;
+  --sidebar-border: #343734;
+  --sidebar-ring: #46c7a4;
+  --canvas: #171918;
+  --ink: #ececea;
+  --ink-muted: #a8aaa6;
+  --ink-faint: #777a76;
+  --line: #343734;
+  --cyan: #46c7a4;
+  --cyan-deep: #77ddbd;
+  --cyan-light: #9ce7d1;
+  --cyan-soft: #1e342c;
+  --grid: rgba(255, 255, 255, 0.02);
+  --selection: #315b4d;
+  --selection-text: #f4f4f1;
 }
 
 @theme inline {
@@ -146,7 +146,6 @@
 }
 
 html {
-  color-scheme: light;
   background: var(--background);
   color: var(--foreground);
   scroll-behavior: smooth;
@@ -240,6 +239,17 @@ button:not(:disabled),
 
 .stat-card.bg-ink > span {
   color: rgba(255, 255, 255, 0.62);
+}
+
+.stat-card.bg-ink {
+  background-color: #292929;
+  border-color: #292929;
+  color: #ffffff;
+}
+
+.dark .stat-card.bg-ink {
+  background-color: #303330;
+  border-color: #303330;
 }
 
 .stat-card > strong {
