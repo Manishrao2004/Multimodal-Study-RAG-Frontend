@@ -3,50 +3,50 @@
 @import "../vendor/shadcn-tailwind-4.13.0.css";
 
 :root {
-  --background: #f4f7f7;
-  --foreground: #0b1f2a;
+  --background: #f7f7f5;
+  --foreground: #222225;
   --card: #ffffff;
-  --card-foreground: #0b1f2a;
+  --card-foreground: #222225;
   --popover: #ffffff;
-  --popover-foreground: #0b1f2a;
-  --primary: #0b1f2a;
+  --popover-foreground: #222225;
+  --primary: #292929;
   --primary-foreground: #ffffff;
-  --secondary: #e7f4f4;
-  --secondary-foreground: #0b5961;
-  --muted: #edf2f2;
-  --muted-foreground: #60717a;
-  --accent: #e7f4f4;
-  --accent-foreground: #0b5961;
+  --secondary: #f1f1ef;
+  --secondary-foreground: #2b2b2d;
+  --muted: #f2f2f0;
+  --muted-foreground: #737376;
+  --accent: #e4f7f1;
+  --accent-foreground: #087c63;
   --destructive: #d64a4a;
-  --border: #dbe3e4;
-  --input: #dbe3e4;
-  --ring: #18a6ae;
-  --chart-1: #18a6ae;
-  --chart-2: #0b5961;
-  --chart-3: #e3a439;
+  --border: #e4e4e1;
+  --input: #dededb;
+  --ring: #16a085;
+  --chart-1: #16a085;
+  --chart-2: #292929;
+  --chart-3: #e9aa25;
   --chart-4: #5876b8;
   --chart-5: #d96868;
-  --radius: 0.75rem;
+  --radius: 0.625rem;
   --sidebar: #ffffff;
-  --sidebar-foreground: #0b1f2a;
-  --sidebar-primary: #0b1f2a;
+  --sidebar-foreground: #222225;
+  --sidebar-primary: #292929;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e7f4f4;
-  --sidebar-accent-foreground: #0b5961;
-  --sidebar-border: #dbe3e4;
-  --sidebar-ring: #18a6ae;
-  --canvas: #f4f7f7;
-  --ink: #0b1f2a;
-  --ink-muted: #60717a;
-  --ink-faint: #91a0a6;
-  --line: #dbe3e4;
-  --cyan: #18a6ae;
-  --cyan-deep: #0b6e76;
-  --cyan-light: #63d6d8;
-  --cyan-soft: #e5f6f6;
-  --grid: rgba(11, 31, 42, 0.025);
-  --selection: #bcebec;
-  --selection-text: #0b1f2a;
+  --sidebar-accent: #f1f1ef;
+  --sidebar-accent-foreground: #222225;
+  --sidebar-border: #e4e4e1;
+  --sidebar-ring: #16a085;
+  --canvas: #f7f7f5;
+  --ink: #222225;
+  --ink-muted: #737376;
+  --ink-faint: #a2a2a5;
+  --line: #e4e4e1;
+  --cyan: #16a085;
+  --cyan-deep: #087c63;
+  --cyan-light: #6ad4b9;
+  --cyan-soft: #e4f7f1;
+  --grid: rgba(34, 34, 37, 0.02);
+  --selection: #b9eadc;
+  --selection-text: #222225;
 }
 
 .dark {
@@ -153,11 +153,7 @@ html {
 
 body {
   min-width: 320px;
-  background:
-    linear-gradient(var(--grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid) 1px, transparent 1px),
-    var(--background);
-  background-size: 40px 40px;
+  background: var(--background);
   color: var(--foreground);
   font-family: "Aptos", "Segoe UI Variable", "Segoe UI", sans-serif;
   text-rendering: optimizeLegibility;
@@ -196,7 +192,7 @@ button:not(:disabled),
   flex-direction: column;
   gap: 0.35rem;
   border: 1px solid var(--border);
-  border-radius: 0.9rem;
+  border-radius: 0.625rem;
   background: var(--card);
   padding: 1rem;
 }
@@ -217,11 +213,23 @@ button:not(:disabled),
   min-height: 128px;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 1.25rem;
+  border-radius: 0.75rem;
   background-color: var(--card);
   padding: 1.25rem;
-  box-shadow: 0 10px 30px rgba(2, 12, 17, 0.12);
+  box-shadow: none;
 }
+
+/* The product uses a compact, data-first dashboard surface.  These legacy
+   utility classes appear across all three workspaces, so normalising them
+   here keeps the visual rhythm consistent without changing their behaviour. */
+.rounded-\[24px\] { border-radius: 0.875rem !important; }
+.rounded-\[22px\] { border-radius: 0.75rem !important; }
+.rounded-2xl { border-radius: 0.75rem !important; }
+.rounded-xl { border-radius: 0.625rem !important; }
+.shadow-\[0_20px_60px_rgba\(8\,31\,43\,0\.08\)\],
+.shadow-\[0_18px_45px_rgba\(8\,31\,43\,0\.06\)\],
+.shadow-\[0_15px_38px_rgba\(8\,31\,43\,0\.06\)\],
+.shadow-\[0_14px_30px_rgba\(11\,31\,42\,0\.08\)\] { box-shadow: 0 8px 22px rgba(25, 25, 25, 0.035) !important; }
 
 .stat-card > span {
   display: block;

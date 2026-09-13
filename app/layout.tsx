@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 
 import { ThemeProvider } from "@/components/theme-provider";
-import { ThemeToggle } from "@/components/theme-toggle";
 import "./globals.css";
 import "./dark-fixes.css";
 import "./footer-layout.css";
@@ -21,9 +20,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <ThemeProvider>
           {children}
-          <div className="fixed right-4 top-[84px] z-50 sm:right-6" aria-label="Appearance controls">
-            <ThemeToggle />
-          </div>
         </ThemeProvider>
       </body>
     </html>
