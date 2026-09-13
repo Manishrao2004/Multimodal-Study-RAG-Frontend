@@ -43,7 +43,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
 
-const ACCEPTED = ".pdf,.docx,.pptx,.html,.htm,.mp3,.wav,.m4a,.flac,.ogg,.webm";
+const ACCEPTED = ".pdf,.docx,.pptx,.html,.htm,.md,.txt,.mp3,.wav,.m4a,.flac,.ogg,.webm,.mp4,.mpga";
 
 function documentIcon(document: DocumentSummary) {
   if (document.audio_chunks) return FileAudio;
@@ -108,6 +108,7 @@ export function LibraryWorkspace({ revision, onLibraryChanged }: LibraryWorkspac
         window.clearInterval(timer);
         setUploading({ name: file.name, progress: 100 });
         setLastUpload(response);
+        if (response.warnings.length) toast.warning(response.warnings[0]);
         toast.success(`${response.source_file} is ready to search`);
       } catch (error) {
         window.clearInterval(timer);
@@ -145,7 +146,7 @@ export function LibraryWorkspace({ revision, onLibraryChanged }: LibraryWorkspac
           <p className="eyebrow">Knowledge library</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-[-0.035em] text-ink sm:text-4xl">Everything you study, in one index.</h1>
         </div>
-        <Button onClick={() => inputRef.current?.click()} className="w-fit rounded-xl bg-ink px-5 text-white hover:bg-ink/90">
+        <Button onClick={() => inputRef.current?.click()} className="w-fit rounded-xl action-surface px-5">
           <Plus /> Add material
         </Button>
       </div>
@@ -156,12 +157,15 @@ export function LibraryWorkspace({ revision, onLibraryChanged }: LibraryWorkspac
         type="file"
         multiple
         accept={ACCEPTED}
-        onChange={(event) => void uploadFiles(Array.from(event.target.files ?? []))}
+        onChange={(event) => {
+          void uploadFiles(Array.from(event.target.files ?? []));
+          event.currentTarget.value = "";
+        }}
       />
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <div className="stat-card bg-ink text-white md:col-span-1">
-          <span className="text-white/55">Documents</span>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="stat-card md:col-span-1">
+          <span>Documents</span>
           <strong>{stats?.documents ?? "—"}</strong>
           <BookOpen className="absolute bottom-4 right-4 size-8 text-cyan-light/70" />
         </div>

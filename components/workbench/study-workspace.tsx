@@ -30,6 +30,7 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EvidencePanel } from "@/components/workbench/evidence-panel";
+import { RichText } from "@/components/workbench/rich-text";
 
 type Tool = "summary" | "compare" | "quiz";
 
@@ -38,10 +39,6 @@ const toolInfo = {
   compare: { title: "Source comparison", description: "See how two documents explain the same topic differently.", icon: Files },
   quiz: { title: "Practice set", description: "Generate questions that stay traceable to a real source chunk.", icon: CircleHelp },
 };
-
-function ResultText({ children }: { children: string }) {
-  return <div className="whitespace-pre-wrap text-[16px] leading-8 text-ink">{children}</div>;
-}
 
 export function StudyWorkspace({ revision }: { revision: number }) {
   const [tool, setTool] = useState<Tool>("summary");
@@ -110,16 +107,16 @@ export function StudyWorkspace({ revision }: { revision: number }) {
       </div>
 
       <Tabs value={tool} onValueChange={(value) => resetResult(value as Tool)}>
-        <TabsList variant="line" className="mb-6 w-full justify-start gap-5 overflow-x-auto border-b border-line pb-3 sm:gap-8">
+        <TabsList variant="line" className="mb-6 h-auto w-full max-w-full justify-start gap-6 overflow-x-auto overflow-y-hidden rounded-none border-b border-line bg-transparent p-0 [scrollbar-width:none] sm:gap-8 [&::-webkit-scrollbar]:hidden">
           {(Object.keys(toolInfo) as Tool[]).map((item) => {
             const Icon = toolInfo[item].icon;
-            return <TabsTrigger key={item} value={item} className="h-10 flex-none px-1 text-sm"><Icon /> {toolInfo[item].title}</TabsTrigger>;
+            return <TabsTrigger key={item} value={item} className="-mb-px h-11 flex-none rounded-none border-x-0 border-t-0 border-b-2 border-transparent px-1 text-sm text-ink-muted hover:text-ink data-[state=active]:border-cyan data-[state=active]:bg-transparent data-[state=active]:text-ink after:hidden"><Icon /> {toolInfo[item].title}</TabsTrigger>;
           })}
         </TabsList>
 
         {(Object.keys(toolInfo) as Tool[]).map((item) => (
           <TabsContent key={item} value={item}>
-            <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
+            <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
               <form onSubmit={run} className="h-fit rounded-[24px] border border-line bg-white p-5 shadow-[0_15px_38px_rgba(8,31,43,0.06)] lg:sticky lg:top-24 sm:p-6">
                 <span className="flex size-11 items-center justify-center rounded-xl bg-cyan-soft text-cyan-deep"><ActiveIcon className="size-5" /></span>
                 <h2 className="mt-5 text-xl font-semibold text-ink">{toolInfo[tool].title}</h2>
@@ -134,7 +131,7 @@ export function StudyWorkspace({ revision }: { revision: number }) {
                       rows={3}
                       maxLength={4000}
                       placeholder="e.g. backpropagation and vanishing gradients"
-                      className="w-full resize-none rounded-xl border border-line bg-canvas px-3 py-3 text-sm leading-6 text-ink outline-none transition placeholder:text-ink-faint focus:border-cyan/50 focus:bg-white focus:ring-2 focus:ring-cyan/10"
+                      className="w-full resize-none rounded-xl border border-line bg-canvas px-3 py-3 text-sm leading-6 text-ink outline-none transition placeholder:text-ink-faint focus:border-cyan/50 focus:bg-card focus:ring-2 focus:ring-cyan/10"
                     />
                   </label>
 
@@ -185,7 +182,7 @@ export function StudyWorkspace({ revision }: { revision: number }) {
                   )}
                 </div>
 
-                <Button type="submit" disabled={loading || !topic.trim()} className="mt-7 w-full rounded-xl bg-ink text-white hover:bg-ink/90">
+                <Button type="submit" disabled={loading || !topic.trim()} className="mt-7 w-full rounded-xl action-surface">
                   {loading ? <LoaderCircle className="animate-spin" /> : <Sparkles />}
                   {loading ? "Working from your sources…" : tool === "summary" ? "Create summary" : tool === "compare" ? "Compare sources" : "Generate practice set"}
                 </Button>
@@ -210,7 +207,7 @@ export function StudyWorkspace({ revision }: { revision: number }) {
                           return (
                             <article key={`${quizItem.question}-${index}`} className="rounded-[22px] border border-line bg-white p-5 sm:p-6">
                               <div className="flex items-start gap-3">
-                                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-ink font-mono text-xs font-bold text-white">{String(index + 1).padStart(2, "0")}</span>
+                                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg action-surface font-mono text-xs font-bold">{String(index + 1).padStart(2, "0")}</span>
                                 <div className="min-w-0 flex-1">
                                   <h3 className="text-[16px] font-semibold leading-7 text-ink">{quizItem.question}</h3>
                                   {quizItem.options && <div className="mt-4 grid gap-2 sm:grid-cols-2">{quizItem.options.map((option, optionIndex) => <div key={option} className={cn("rounded-xl border px-3 py-2.5 text-sm", isRevealed && option === quizItem.answer ? "border-emerald-300 bg-emerald-50 text-emerald-950" : "border-line bg-canvas text-ink-muted")}><span className="mr-2 font-mono text-xs">{String.fromCharCode(65 + optionIndex)}</span>{option}{isRevealed && option === quizItem.answer && <Check className="ml-2 inline size-4" />}</div>)}</div>}
@@ -228,7 +225,7 @@ export function StudyWorkspace({ revision }: { revision: number }) {
                     ) : (
                       <article className="rounded-[24px] border border-line bg-white p-6 shadow-[0_15px_38px_rgba(8,31,43,0.06)] sm:p-8">
                         <div className="mb-6 flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-xl bg-cyan-soft text-cyan-deep"><ActiveIcon className="size-5" /></span><div><p className="font-semibold text-ink">{toolInfo[tool].title}</p><p className="text-xs text-ink-muted">Synthesized from {evidence.length} evidence chunks</p></div></div>
-                        <ResultText>{studyResult?.summary || studyResult?.comparison || ""}</ResultText>
+                        <RichText evidence={evidence}>{studyResult?.summary || studyResult?.comparison || ""}</RichText>
                         <div className="mt-7 flex flex-wrap gap-2 border-t border-line pt-5">
                           <Badge variant="outline" className="rounded-full border-line"><Check className="text-emerald-600" /> {Math.round((studyResult?.citation_validity_rate ?? 0) * 100)}% valid citations</Badge>
                           {studyResult?.grounding_ratio != null && <Badge variant="outline" className="rounded-full border-line"><Layers3 className="text-cyan-deep" /> {Math.round(studyResult.grounding_ratio * 100)}% grounded</Badge>}

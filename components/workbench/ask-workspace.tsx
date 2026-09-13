@@ -19,7 +19,7 @@ import {
 import { toast } from "sonner";
 
 import { api } from "@/lib/api";
-import type { AskResponse, EvidenceItem, RetrievalMode, ScreenshotAskResponse } from "@/lib/rag-types";
+import type { AskResponse, RetrievalMode, ScreenshotAskResponse } from "@/lib/rag-types";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { EvidencePanel } from "@/components/workbench/evidence-panel";
+import { RichText } from "@/components/workbench/rich-text";
 
 const promptIdeas = [
   "Explain the key idea and cite the strongest evidence",
@@ -61,33 +62,7 @@ function isAskResult(result: Result): result is AskResponse {
   return "mode" in result;
 }
 
-function AnswerText({ answer, evidence }: { answer: string; evidence: EvidenceItem[] }) {
-  const pieces = answer.split(/(\[\d+\])/g);
-  return (
-    <div className="whitespace-pre-wrap text-[16px] leading-8 text-ink">
-      {pieces.map((piece, index) => {
-        const match = piece.match(/^\[(\d+)\]$/);
-        if (!match) return <span key={`${piece}-${index}`}>{piece}</span>;
-        const marker = Number(match[1]);
-        const exists = marker > 0 && marker <= evidence.length;
-        return (
-          <button
-            key={`${piece}-${index}`}
-            type="button"
-            disabled={!exists}
-            onClick={() => document.getElementById(`evidence-${marker}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}
-            className="mx-0.5 inline-flex translate-y-[-1px] rounded-md bg-cyan-soft px-1.5 py-0.5 font-mono text-xs font-bold text-cyan-deep transition hover:bg-cyan/20 disabled:opacity-50"
-            aria-label={`Go to source ${marker}`}
-          >
-            {piece}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-export function AskWorkspace({ indexReady }: { indexReady: boolean }) {
+export function AskWorkspace({ indexReady, onLibraryChanged }: { indexReady: boolean; onLibraryChanged?: () => void }) {
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<RetrievalMode>("full");
   const [topK, setTopK] = useState(5);
@@ -212,6 +187,7 @@ export function AskWorkspace({ indexReady }: { indexReady: boolean }) {
             detect_contradictions: detectContradictions,
           });
       setResult(response);
+      if ("saved" in response && response.saved) onLibraryChanged?.();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "The answer could not be generated.");
     } finally {
@@ -308,7 +284,7 @@ export function AskWorkspace({ indexReady }: { indexReady: boolean }) {
                 type="submit"
                 disabled={loading || !query.trim()}
                 size="icon-lg"
-                className="ml-auto rounded-xl bg-ink text-white shadow-[0_8px_20px_rgba(8,31,43,0.18)] hover:bg-ink/90 sm:ml-0"
+                className="ml-auto rounded-xl action-surface shadow-[0_8px_20px_rgba(8,31,43,0.18)] sm:ml-0"
                 aria-label="Ask question"
               >
                 {loading ? <LoaderCircle className="animate-spin" /> : <ArrowUp />}
@@ -359,7 +335,7 @@ export function AskWorkspace({ indexReady }: { indexReady: boolean }) {
             <article className="rounded-[24px] border border-line bg-white p-6 shadow-[0_18px_45px_rgba(8,31,43,0.06)] sm:p-8">
               <div className="mb-6 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <span className="flex size-10 items-center justify-center rounded-xl bg-ink text-white"><Bot className="size-5" /></span>
+                  <span className="flex size-10 items-center justify-center rounded-xl action-surface"><Bot className="size-5" /></span>
                   <div>
                     <p className="font-semibold text-ink">Grounded answer</p>
                     <p className="text-xs text-ink-muted">Generated from {evidence.length} retrieved chunks</p>
@@ -390,7 +366,7 @@ export function AskWorkspace({ indexReady }: { indexReady: boolean }) {
                   ))}
                 </div>
               ) : (
-                <AnswerText answer={result.answer} evidence={evidence} />
+                <RichText evidence={evidence}>{result.answer}</RichText>
               )}
 
               {isAskResult(result) && result.disagreements.length > 0 && (
@@ -442,7 +418,7 @@ export function AskWorkspace({ indexReady }: { indexReady: boolean }) {
                 )}
               </div>
             </div>
-            <div className="rounded-2xl bg-ink p-4 text-white">
+            <div className="rounded-2xl action-surface p-4">
               <div className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="size-4 text-cyan-light" /> How to read this</div>
               <p className="mt-2 text-sm leading-6 text-white/65">Open any source card to inspect the exact chunk that supported the answer.</p>
             </div>

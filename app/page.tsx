@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import {
-  BookOpen,
   BrainCircuit,
   ChevronRight,
   Database,
@@ -96,10 +95,10 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-canvas text-ink">
-      <header className="sticky top-0 z-40 border-b border-line/90 bg-white/95 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-line/90 bg-card/95 backdrop-blur-xl">
         <div className="mx-auto flex h-[72px] max-w-[1440px] items-center px-4 sm:px-6 lg:px-8">
           <button type="button" onClick={() => chooseView("ask")} className="group flex items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan/40">
-            <span className="relative flex size-10 items-center justify-center overflow-hidden rounded-[13px] bg-ink text-white shadow-[0_7px_16px_rgba(7,29,40,0.18)]">
+            <span className="relative flex size-10 items-center justify-center overflow-hidden rounded-[13px] action-surface shadow-[0_7px_16px_rgba(7,29,40,0.18)]">
               <BrainCircuit className="relative z-10 size-5" />
               <span className="absolute bottom-0 right-0 size-3 bg-cyan" />
             </span>
@@ -119,7 +118,7 @@ export default function Home() {
                   onClick={() => chooseView(item.id)}
                   className={cn(
                     "flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition",
-                    view === item.id ? "bg-ink text-white shadow-none" : "bg-white text-ink-muted hover:bg-muted hover:text-ink",
+                    view === item.id ? "action-surface shadow-none" : "bg-white text-ink-muted hover:bg-muted hover:text-ink",
                   )}
                 >
                   <Icon className="size-4" /> {item.label}
@@ -152,12 +151,12 @@ export default function Home() {
       </header>
 
       <main>
-        {view === "ask" && <AskWorkspace indexReady={Boolean(stats?.index_ready)} />}
+        {view === "ask" && <AskWorkspace indexReady={Boolean(stats?.index_ready)} onLibraryChanged={() => setRevision((value) => value + 1)} />}
         {view === "library" && <LibraryWorkspace revision={revision} onLibraryChanged={() => setRevision((value) => value + 1)} />}
         {view === "study" && <StudyWorkspace revision={revision} />}
       </main>
 
-      <footer className="border-t border-line bg-white/50">
+      <footer className="border-t border-line bg-card/50">
         <div className="mx-auto flex max-w-[1180px] flex-col gap-2 px-6 py-5 text-xs text-ink-faint sm:flex-row sm:items-center sm:justify-between">
           <span>Evidence-first study assistant · local, single-user workspace</span>
           <span className="font-mono">{API_BASE}</span>
@@ -167,7 +166,7 @@ export default function Home() {
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-[88%] border-line bg-white p-0 sm:max-w-sm">
           <SheetHeader className="border-b border-line px-5 py-6 text-left">
-            <SheetTitle className="flex items-center gap-3 text-ink"><span className="flex size-9 items-center justify-center rounded-xl bg-ink text-white"><BrainCircuit className="size-5" /></span> Verity Study</SheetTitle>
+            <SheetTitle className="flex items-center gap-3 text-ink"><span className="flex size-9 items-center justify-center rounded-xl action-surface"><BrainCircuit className="size-5" /></span> Verity Study</SheetTitle>
             <SheetDescription>Navigate your study workspace</SheetDescription>
           </SheetHeader>
           <nav className="space-y-2 p-4">
@@ -212,7 +211,6 @@ export default function Home() {
               ) : <p className="py-5 text-sm text-ink-muted">Configuration is available when the backend is online.</p>}
             </div>
             <Button variant="outline" className="w-full rounded-xl border-line bg-white" onClick={() => { void refreshSystem(); void openConfig(); }}><RefreshCw /> Refresh status</Button>
-            <div className="flex items-start gap-3 rounded-2xl bg-ink p-4 text-white"><BookOpen className="mt-0.5 size-4 shrink-0 text-cyan-light" /><p className="text-xs leading-5 text-white/65">The frontend reads model status from the backend and never exposes secret values.</p></div>
           </div>
         </SheetContent>
       </Sheet>
