@@ -14,7 +14,7 @@ import {
   WifiOff,
 } from "lucide-react";
 
-import { api, API_BASE } from "@/lib/api";
+import { api } from "@/lib/api";
 import type { KnowledgeBaseStats, RuntimeConfig } from "@/lib/rag-types";
 import { cn } from "@/lib/utils";
 import { AskWorkspace } from "@/components/workbench/ask-workspace";
@@ -118,7 +118,7 @@ export default function Home() {
                   onClick={() => chooseView(item.id)}
                   className={cn(
                     "flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition",
-                    view === item.id ? "action-surface shadow-none" : "bg-white text-ink-muted hover:bg-muted hover:text-ink",
+                    view === item.id ? "action-surface shadow-none" : "bg-card text-ink-muted hover:bg-muted hover:text-ink",
                   )}
                 >
                   <Icon className="size-4" /> {item.label}
@@ -131,7 +131,7 @@ export default function Home() {
             <button
               type="button"
               onClick={openConfig}
-              className="hidden h-10 items-center gap-2 rounded-xl border border-line bg-white px-3 text-sm font-medium text-ink-muted transition hover:border-cyan/30 hover:text-ink sm:flex"
+              className="hidden h-10 items-center gap-2 rounded-xl border border-line bg-card px-3 text-sm font-medium text-ink-muted transition hover:border-cyan/30 hover:text-ink sm:flex"
             >
               <span className={cn("size-2 rounded-full", online === null ? "animate-pulse bg-amber-400" : online ? "bg-emerald-500" : "bg-rose-500")} />
               {online === null ? "Connecting" : online ? "Engine online" : "Engine offline"}
@@ -139,7 +139,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => chooseView("library")}
-              className="hidden h-10 items-center gap-2 rounded-xl px-3 text-sm text-ink-muted transition hover:bg-white lg:flex"
+              className="hidden h-10 items-center gap-2 rounded-xl px-3 text-sm text-ink-muted transition hover:bg-card lg:flex"
             >
               <Database className="size-4" />
               <span><strong className="font-mono text-ink">{stats?.documents ?? 0}</strong> sources</span>
@@ -156,15 +156,8 @@ export default function Home() {
         {view === "study" && <StudyWorkspace revision={revision} />}
       </main>
 
-      <footer className="border-t border-line bg-card/50">
-        <div className="mx-auto flex max-w-[1180px] flex-col gap-2 px-6 py-5 text-xs text-ink-faint sm:flex-row sm:items-center sm:justify-between">
-          <span>Evidence-first study assistant · local, single-user workspace</span>
-          <span className="font-mono">{API_BASE}</span>
-        </div>
-      </footer>
-
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="w-[88%] border-line bg-white p-0 sm:max-w-sm">
+        <SheetContent side="left" className="w-[88%] border-line bg-card p-0 sm:max-w-sm">
           <SheetHeader className="border-b border-line px-5 py-6 text-left">
             <SheetTitle className="flex items-center gap-3 text-ink"><span className="flex size-9 items-center justify-center rounded-xl action-surface"><BrainCircuit className="size-5" /></span> Verity Study</SheetTitle>
             <SheetDescription>Navigate your study workspace</SheetDescription>
@@ -193,12 +186,12 @@ export default function Home() {
             <SheetDescription>Live backend and model configuration. API keys are never displayed.</SheetDescription>
           </SheetHeader>
           <div className="space-y-5 px-4 pb-6">
-            <div className="rounded-2xl border border-line bg-white p-4">
+            <div className="rounded-2xl border border-line bg-card p-4">
               <ConfigRow label="Connection" value={online ? "Online" : "Offline"} active={Boolean(online)} />
               <ConfigRow label="Knowledge index" value={stats?.index_ready ? "Ready" : "Empty"} active={Boolean(stats?.index_ready)} />
               <ConfigRow label="Indexed content" value={`${stats?.chunks ?? 0} chunks`} active={Boolean(stats?.chunks)} />
             </div>
-            <div className="rounded-2xl border border-line bg-white p-4">
+            <div className="rounded-2xl border border-line bg-card p-4">
               <p className="eyebrow mb-2">Models</p>
               {config ? (
                 <>
@@ -210,7 +203,7 @@ export default function Home() {
                 </>
               ) : <p className="py-5 text-sm text-ink-muted">Configuration is available when the backend is online.</p>}
             </div>
-            <Button variant="outline" className="w-full rounded-xl border-line bg-white" onClick={() => { void refreshSystem(); void openConfig(); }}><RefreshCw /> Refresh status</Button>
+            <Button variant="outline" className="w-full rounded-xl border-line bg-card" onClick={() => { void refreshSystem(); void openConfig(); }}><RefreshCw /> Refresh status</Button>
           </div>
         </SheetContent>
       </Sheet>

@@ -56,6 +56,14 @@ export interface AskResponse {
   disagreements: Disagreement[];
   mode: RetrievalMode;
   latency_ms: number | null;
+  comprehensive: boolean;
+  sources_considered: string[];
+  sources_used: string[];
+}
+
+export interface ConversationTurn {
+  role: "user" | "assistant";
+  content: string;
 }
 
 export interface ScreenshotAskResponse {

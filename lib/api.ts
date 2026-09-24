@@ -1,5 +1,6 @@
 import type {
   AskResponse,
+  ConversationTurn,
   DocumentSummary,
   IngestResponse,
   KnowledgeBaseStats,
@@ -55,7 +56,7 @@ export const api = {
   config: () => request<RuntimeConfig>("/config"),
   documents: () => request<DocumentSummary[]>("/documents"),
   stats: () => request<KnowledgeBaseStats>("/documents/stats"),
-  ask: (body: { query: string; top_k: number; mode: RetrievalMode; detect_contradictions: boolean }) =>
+  ask: (body: { query: string; top_k: number; mode: RetrievalMode; detect_contradictions: boolean; comprehensive?: boolean; history?: ConversationTurn[] }) =>
     request<AskResponse>("/ask", json(body)),
   visionAsk: (body: FormData) => request<ScreenshotAskResponse>("/vision/ask", { method: "POST", body }),
   ingest: (file: File) => {
