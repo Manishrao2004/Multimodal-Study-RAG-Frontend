@@ -1,6 +1,9 @@
 export type ChunkType = "text" | "table" | "visual" | "audio";
 
 export type RetrievalMode = "bm25_only" | "dense_only" | "hybrid" | "full";
+export type AnswerScope = "auto" | "sources_only" | "model_only";
+export type AnswerBasis = "sources" | "mixed" | "model";
+export type EvidenceSufficiency = "strong" | "partial" | "insufficient" | "not_checked";
 
 export interface Chunk {
   chunk_id: string;
@@ -59,6 +62,10 @@ export interface AskResponse {
   comprehensive: boolean;
   sources_considered: string[];
   sources_used: string[];
+  answer_scope: AnswerScope;
+  answer_basis: AnswerBasis;
+  evidence_sufficiency: EvidenceSufficiency;
+  provenance_notice: string | null;
 }
 
 export interface ConversationTurn {

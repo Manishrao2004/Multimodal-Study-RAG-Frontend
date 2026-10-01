@@ -21,7 +21,7 @@ import {
 import { toast } from "sonner";
 
 import { api } from "@/lib/api";
-import type { AskResponse, ConversationTurn, EvidenceItem, RetrievalMode, ScreenshotAskResponse } from "@/lib/rag-types";
+import type { AnswerScope, AskResponse, ConversationTurn, EvidenceItem, RetrievalMode, ScreenshotAskResponse } from "@/lib/rag-types";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -56,6 +56,12 @@ const modes: { value: RetrievalMode; label: string; detail: string }[] = [
   { value: "hybrid", label: "Hybrid", detail: "BM25 + dense retrieval with fusion" },
   { value: "dense_only", label: "Dense only", detail: "Semantic vector retrieval" },
   { value: "bm25_only", label: "BM25 only", detail: "Exact lexical retrieval" },
+];
+
+const answerScopes: { value: AnswerScope; label: string; detail: string }[] = [
+  { value: "auto", label: "Auto", detail: "Use sources first, then clearly labelled model knowledge when needed" },
+  { value: "sources_only", label: "My sources only", detail: "Answer strictly from uploaded study material" },
+  { value: "model_only", label: "General knowledge", detail: "Use the underlying model without document citations" },
 ];
 
 type Result = AskResponse | ScreenshotAskResponse;
@@ -102,6 +108,7 @@ export function AskWorkspace({ indexReady, onLibraryChanged }: { indexReady: boo
   const [query, setQuery] = useState("");
   const [activeQuestion, setActiveQuestion] = useState("");
   const [mode, setMode] = useState<RetrievalMode>("full");
+  const [answerScope, setAnswerScope] = useState<AnswerScope>("auto");
   const [topK, setTopK] = useState(5);
   const [detectContradictions, setDetectContradictions] = useState(true);
   const [useKnowledgeBase, setUseKnowledgeBase] = useState(true);
@@ -242,6 +249,7 @@ export function AskWorkspace({ indexReady, onLibraryChanged }: { indexReady: boo
             detect_contradictions: detectContradictions,
             comprehensive,
             history: chatMessages.slice(-12).map(({ role, content }) => ({ role, content })),
+            answer_scope: answerScope,
           });
           setResult(response);
           return {
@@ -257,7 +265,7 @@ export function AskWorkspace({ indexReady, onLibraryChanged }: { indexReady: boo
     }, { signal: lifecycle.signal })).catch(() => undefined);
 
     return () => lifecycle.abort();
-  }, [comprehensive, detectContradictions, mode, topK, chatMessages]);
+  }, [answerScope, comprehensive, detectContradictions, mode, topK, chatMessages]);
 
   const submit = async (event?: FormEvent) => {
     event?.preventDefault();
@@ -290,6 +298,7 @@ export function AskWorkspace({ indexReady, onLibraryChanged }: { indexReady: boo
             detect_contradictions: detectContradictions,
             comprehensive,
             history: chatMessages.slice(-12).map(({ role, content }) => ({ role, content })),
+            answer_scope: answerScope,
           });
       setResult(response);
       if (!image) {
@@ -387,7 +396,7 @@ export function AskWorkspace({ indexReady, onLibraryChanged }: { indexReady: boo
                 className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-ink-muted transition hover:bg-muted hover:text-ink"
               >
                 <Settings2 className="size-4" />
-                {image ? "Vision settings" : modes.find((item) => item.value === mode)?.label}
+                {image ? "Vision settings" : answerScopes.find((item) => item.value === answerScope)?.label}
                 <ChevronDown className="size-3.5" />
               </button>
 
@@ -545,6 +554,13 @@ export function AskWorkspace({ indexReady, onLibraryChanged }: { indexReady: boo
                   <p className="mt-2 text-xs text-ink-muted">{result.sources_used.join(" · ") || "No source-specific evidence was found."}</p>
                 </div>
               )}
+
+              {isAskResult(result) && result.provenance_notice && (
+                <div className={cn("mt-7 rounded-2xl border p-4 text-sm", result.answer_basis === "sources" ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200" : result.answer_basis === "mixed" ? "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200" : "border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200")}>
+                  <p className="font-semibold">{result.answer_basis === "sources" ? "From your sources" : result.answer_basis === "mixed" ? "Sources + general knowledge" : "General model knowledge"}</p>
+                  <p className="mt-1 leading-6 opacity-80">{result.provenance_notice}</p>
+                </div>
+              )}
             </article>
 
             <EvidencePanel items={evidence} />
@@ -556,15 +572,13 @@ export function AskWorkspace({ indexReady, onLibraryChanged }: { indexReady: boo
               <div className="mt-4 space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-ink-muted">Grounded tokens</span>
-                  <strong className="font-mono text-sm text-ink">{Math.round((result.grounding_ratio ?? 0) * 100)}%</strong>
+                  <strong className="font-mono text-sm text-ink">{result.grounding_ratio == null ? "N/A" : `${Math.round(result.grounding_ratio * 100)}%`}</strong>
                 </div>
-                <div className="h-2 overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-cyan transition-all" style={{ width: `${Math.round((result.grounding_ratio ?? 0) * 100)}%` }} />
-                </div>
+                {result.grounding_ratio != null && <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-cyan transition-all" style={{ width: `${Math.round(result.grounding_ratio * 100)}%` }} /></div>}
                 <div className="flex items-center justify-between border-t border-line pt-4">
                   <span className="text-sm text-ink-muted">Citation validity</span>
                   <span className="flex items-center gap-1.5 font-mono text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-                    <CheckCircle2 className="size-4" /> {Math.round((result.citation_validity_rate ?? 0) * 100)}%
+                    <CheckCircle2 className="size-4" /> {result.citation_validity_rate == null ? "N/A" : `${Math.round(result.citation_validity_rate * 100)}%`}
                   </span>
                 </div>
                 {isAskResult(result) && result.latency_ms != null && (
@@ -623,9 +637,21 @@ export function AskWorkspace({ indexReady, onLibraryChanged }: { indexReady: boo
             <SheetDescription>Control how evidence is selected for this question.</SheetDescription>
           </SheetHeader>
           <div className="space-y-7 px-4 pb-6">
+            {!image && (
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-ink">Knowledge mode</label>
+                {answerScopes.map((item) => (
+                  <button key={item.value} type="button" onClick={() => setAnswerScope(item.value)} className={cn("flex w-full items-start gap-3 rounded-xl border p-3 text-left transition", answerScope === item.value ? "border-cyan bg-cyan-soft/60" : "border-line hover:bg-canvas")}>
+                    <span className={cn("mt-1 size-3 rounded-full border-2", answerScope === item.value ? "border-cyan bg-cyan" : "border-muted-foreground/40")} />
+                    <span><strong className="block text-sm text-ink">{item.label}</strong><span className="mt-0.5 block text-xs text-ink-muted">{item.detail}</span></span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {!image ? (
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-ink">Pipeline mode</label>
+                <label className="text-sm font-semibold text-ink">Advanced retrieval pipeline</label>
                 {modes.map((item) => (
                   <button
                     key={item.value}
