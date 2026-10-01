@@ -1,19 +1,11 @@
 "use client";
 
-import { useId, useState } from "react";
-import {
-  Braces,
-  Clock3,
-  FileText,
-  ImageIcon,
-  Layers3,
-  Table2,
-} from "lucide-react";
+/* eslint-disable @next/next/no-img-element -- Evidence images are served by the backend. */
 
+import { useId, useState } from "react";
+import { ExternalLink, FileText } from "lucide-react";
 import { API_BASE, formatTimestamp } from "@/lib/api";
 import type { EvidenceItem } from "@/lib/rag-types";
-import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -23,28 +15,13 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 
-const typeIcons = {
-  text: FileText,
-  table: Table2,
-  visual: ImageIcon,
-  audio: Clock3,
-};
-
 function locator(item: EvidenceItem) {
   const { chunk } = item;
-  if (chunk.type === "audio" && chunk.timestamp_start != null) {
+  if (chunk.type === "audio" && chunk.timestamp_start != null)
     return `${chunk.source_file} · ${formatTimestamp(chunk.timestamp_start)}`;
-  }
   if (chunk.page_number != null)
     return `${chunk.source_file} · page ${chunk.page_number}`;
   return chunk.source_file;
-}
-
-interface EvidencePanelProps {
-  items: EvidenceItem[];
-  title?: string;
-  compact?: boolean;
-  idPrefix?: string;
 }
 
 export function EvidencePanel({
@@ -52,164 +29,100 @@ export function EvidencePanel({
   title = "Source evidence",
   compact = false,
   idPrefix = "evidence",
-}: EvidencePanelProps) {
+}: {
+  items: EvidenceItem[];
+  title?: string;
+  compact?: boolean;
+  idPrefix?: string;
+}) {
   const [selected, setSelected] = useState<EvidenceItem | null>(null);
   const headingId = useId();
-
   if (!items.length) return null;
-
   const grouped = Array.from(
     items.reduce((groups, item) => {
-      const current = groups.get(item.chunk.source_file) ?? [];
-      current.push(item);
-      groups.set(item.chunk.source_file, current);
+      groups.set(item.chunk.source_file, [
+        ...(groups.get(item.chunk.source_file) ?? []),
+        item,
+      ]);
       return groups;
     }, new Map<string, EvidenceItem[]>()),
   );
 
   return (
-    <section aria-labelledby={headingId} className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="eyebrow">Sources</p>
-          <h3 id={headingId} className="mt-1 text-base font-semibold text-ink">
-            {title}
-          </h3>
-        </div>
-        <Badge
-          variant="outline"
-          className="rounded-full border-line bg-card text-ink-muted"
-        >
+    <section
+      aria-labelledby={headingId}
+      className={compact ? "evidence-panel compact" : "evidence-panel"}
+    >
+      <div className="evidence-heading">
+        <h3 id={headingId}>{title}</h3>
+        <span>
           {grouped.length} source{grouped.length === 1 ? "" : "s"} ·{" "}
           {items.length} passages
-        </Badge>
+        </span>
       </div>
-
-      <div className={cn("space-y-3", compact && "space-y-2")}>
-        {grouped.map(([source, sourceItems]) => {
-          const contributionTotal = sourceItems.reduce(
-            (total, item) => total + (item.attribution_percent ?? 0),
-            0,
-          );
-          return (
-            <div
-              key={source}
-              className="overflow-hidden rounded-2xl border border-line bg-card"
-            >
-              <div className="flex items-center gap-3 border-b border-line bg-canvas/60 px-4 py-3">
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-cyan-soft text-cyan-deep">
-                  <FileText className="size-4" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink">
-                    {source}
-                  </p>
-                  <p className="text-xs text-ink-muted">
-                    {sourceItems.length} retrieved passage
-                    {sourceItems.length === 1 ? "" : "s"}
-                  </p>
-                </div>
-                {contributionTotal > 0 && (
-                  <Badge
-                    variant="outline"
-                    className="rounded-full font-mono text-[10px]"
-                  >
-                    {contributionTotal.toFixed(1)}% contribution
-                  </Badge>
-                )}
-              </div>
-              <div className="divide-y divide-line">
-                {sourceItems.map((item) => {
-                  const index = items.indexOf(item);
-                  const Icon = typeIcons[item.chunk.type];
-                  const contribution = item.attribution_percent;
-                  return (
-                    <button
-                      id={`${idPrefix}-${index + 1}`}
-                      type="button"
-                      key={item.chunk.chunk_id}
-                      onClick={() => setSelected(item)}
-                      className="group flex w-full min-w-0 items-start gap-3 px-4 py-3 text-left transition hover:bg-cyan-soft/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyan/50"
-                    >
-                      <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg border border-line bg-card text-ink-muted">
-                        <Icon className="size-3.5" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-[11px] font-bold text-cyan-deep">
-                            [{index + 1}]
-                          </span>
-                          <span className="truncate text-xs font-medium text-ink-muted">
-                            {item.chunk.section_path || locator(item)}
-                          </span>
-                        </div>
-                        <p className="mt-1 line-clamp-2 text-sm leading-5 text-ink-muted">
-                          {item.chunk.text}
-                        </p>
-                      </div>
-                      {contribution != null && (
-                        <span className="mt-1 shrink-0 font-mono text-[10px] text-ink-faint">
-                          {contribution.toFixed(1)}%
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+      {grouped.map(([source, sourceItems]) => {
+        const contribution = sourceItems.reduce(
+          (total, item) => total + (item.attribution_percent ?? 0),
+          0,
+        );
+        return (
+          <div className="evidence-source" key={source}>
+            <div className="evidence-source-header">
+              <FileText size={15} className="shrink-0" />
+              <span title={source}>{source}</span>
+              {contribution > 0 && (
+                <small>{contribution.toFixed(1)}% contribution</small>
+              )}
             </div>
-          );
-        })}
-      </div>
-
+            {sourceItems.map((item) => {
+              const index = items.indexOf(item);
+              return (
+                <button
+                  id={`${idPrefix}-${index + 1}`}
+                  type="button"
+                  key={item.chunk.chunk_id}
+                  className="evidence-passage"
+                  onClick={() => setSelected(item)}
+                  aria-label={`Open passage ${index + 1} from ${source}`}
+                >
+                  <span>[{index + 1}]</span>
+                  <div>
+                    <small>{item.chunk.section_path || locator(item)}</small>
+                    <p className="line-clamp-3">{item.chunk.text}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })}
       <Sheet
         open={Boolean(selected)}
-        onOpenChange={(open) => !open && setSelected(null)}
+        onOpenChange={(open) => {
+          if (!open) setSelected(null);
+        }}
       >
-        <SheetContent className="w-full gap-0 overflow-y-auto border-line bg-canvas p-0 sm:max-w-xl">
+        <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
           {selected && (
             <>
-              <SheetHeader className="border-b border-line bg-card px-6 py-6 pr-14 text-left">
-                <div className="mb-2 flex items-center gap-2">
-                  <Badge className="rounded-full bg-cyan-soft text-cyan-deep hover:bg-cyan-soft">
-                    {selected.chunk.type}
-                  </Badge>
-                  <span className="font-mono text-xs text-ink-faint">
-                    {selected.chunk.chunk_id}
-                  </span>
-                </div>
-                <SheetTitle className="text-xl text-ink">
+              <SheetHeader>
+                <SheetTitle className="break-words pr-7">
                   {selected.chunk.section_path || "Evidence detail"}
                 </SheetTitle>
-                <SheetDescription className="text-ink-muted">
+                <SheetDescription className="break-words">
                   {locator(selected)}
                 </SheetDescription>
               </SheetHeader>
-
-              <div className="space-y-5 p-6">
+              <div className="evidence-detail">
+                {/* Source images are served by the backend, not build-time assets. */}
                 {selected.chunk.image_ref && (
-                  <div className="overflow-hidden rounded-2xl border border-line bg-card p-2">
-                    {/* Backend serves only images tied to validated visual chunks. */}
-                    {/* Dynamic backend evidence URLs are not build-time image assets. */}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={`${API_BASE}/evidence/${encodeURIComponent(selected.chunk.chunk_id)}/image`}
-                      alt={`Source figure from ${selected.chunk.source_file}`}
-                      className="max-h-80 w-full rounded-xl object-contain"
-                    />
-                  </div>
+                  <img
+                    src={`${API_BASE}/evidence/${encodeURIComponent(selected.chunk.chunk_id)}/image`}
+                    alt={`Source figure from ${selected.chunk.source_file}`}
+                  />
                 )}
-
-                <div className="rounded-2xl border border-line bg-card p-5">
-                  <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
-                    <Braces className="size-4 text-cyan-deep" />
-                    Retrieved content
-                  </div>
-                  <p className="whitespace-pre-wrap text-[15px] leading-7 text-ink-muted">
-                    {selected.chunk.text}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
+                <p>{selected.chunk.text}</p>
+                <div className="evidence-metrics">
                   <div className="metric-tile">
                     <span>Answer contribution</span>
                     <strong>
@@ -223,18 +136,13 @@ export function EvidencePanel({
                     <strong>{selected.rerank_score.toFixed(3)}</strong>
                   </div>
                 </div>
-
-                <Button
-                  variant="outline"
-                  className="w-full rounded-xl border-line bg-card"
-                  asChild
-                >
+                <Button variant="outline" asChild>
                   <a
                     href={`${API_BASE}/evidence/${encodeURIComponent(selected.chunk.chunk_id)}`}
                     target="_blank"
                     rel="noreferrer"
                   >
-                    <Layers3 /> Open raw evidence
+                    <ExternalLink size={15} /> Open raw evidence
                   </a>
                 </Button>
               </div>

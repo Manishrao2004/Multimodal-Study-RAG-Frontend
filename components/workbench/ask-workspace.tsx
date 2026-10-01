@@ -5,6 +5,7 @@
 import {
   FormEvent,
   KeyboardEvent,
+  ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -18,14 +19,16 @@ import {
   Copy,
   Download,
   FileText,
+  Globe2,
   History,
   LoaderCircle,
   MessageSquare,
+  MoreHorizontal,
   Paperclip,
   Pencil,
-  Plus,
   Search,
   Settings2,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -44,6 +47,19 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -52,8 +68,8 @@ import {
 } from "@/components/ui/sheet";
 import { EvidencePanel } from "@/components/workbench/evidence-panel";
 import { RichText } from "@/components/workbench/rich-text";
+import { SelectField } from "@/components/workbench/select-field";
 
-const ACTIVE_KEY = "verity-active-conversation";
 type Answer = AskResponse | ScreenshotAskResponse;
 const scopes: { value: AnswerScope; label: string }[] = [
   { value: "auto", label: "Auto" },
@@ -97,7 +113,7 @@ function AnswerMessage({ message }: { message: StoredMessage }) {
   return (
     <article className="answer-message">
       <div className="answer-meta">
-        <span className="font-semibold text-ink">Verity</span>
+        <span className="answer-author">Verity</span>
         <span
           className={cn(
             "provenance-dot",
@@ -230,9 +246,21 @@ function AnswerMessage({ message }: { message: StoredMessage }) {
 
 export function AskWorkspace({
   indexReady,
+  sourceCount,
+  sidebarHeader,
+  sidebarFooter,
+  newChatRequest,
+  onOpenLibrary,
+  onBusyChange,
   onLibraryChanged,
 }: {
   indexReady: boolean;
+  sourceCount: number;
+  sidebarHeader: ReactNode;
+  sidebarFooter: ReactNode;
+  newChatRequest: number;
+  onOpenLibrary: () => void;
+  onBusyChange?: (busy: boolean) => void;
   onLibraryChanged?: () => void;
 }) {
   const [sessions, setSessions] = useState<ConversationSummary[]>([]);
@@ -270,13 +298,6 @@ export function AskWorkspace({
   const selectionRef = useRef(0);
   const retryRef = useRef<{ signature: string; id: string } | null>(null);
 
-  const remember = (id: string) => {
-    try {
-      window.localStorage.setItem(ACTIVE_KEY, id);
-    } catch {
-      /* Server remains the source of truth. */
-    }
-  };
   const updateSession = useCallback((detail: ConversationDetail) => {
     setSessions((current) =>
       [detail, ...current.filter((item) => item.id !== detail.id)].sort(
@@ -324,18 +345,6 @@ export function AskWorkspace({
       }
       const list = await api.conversations();
       setSessions(list);
-      let saved: string | null = null;
-      try {
-        saved = window.localStorage.getItem(ACTIVE_KEY);
-      } catch {
-        /* Storage may be disabled. */
-      }
-      const id = list.find((item) => item.id === saved)?.id ?? list[0]?.id;
-      if (id) {
-        const detail = await api.conversation(id);
-        setConversation(detail);
-        remember(id);
-      }
     } catch (error) {
       setConnectionError(errorMessage(error));
     } finally {
@@ -346,6 +355,22 @@ export function AskWorkspace({
     const frame = window.requestAnimationFrame(() => void load());
     return () => window.cancelAnimationFrame(frame);
   }, [load]);
+  useEffect(() => {
+    if (!newChatRequest) return;
+    const frame = window.requestAnimationFrame(() => {
+      if (busyRef.current) return;
+      selectionRef.current++;
+      setConversation(null);
+      setInitializing(false);
+      setQuery("");
+      setImage(null);
+      setFailure("");
+      setHistoryOpen(false);
+      retryRef.current = null;
+      textareaRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [newChatRequest]);
   useEffect(
     () => () => {
       if (preview) URL.revokeObjectURL(preview);
@@ -379,6 +404,7 @@ export function AskWorkspace({
     if (busyRef.current) return;
     selectionRef.current++;
     setConversation(null);
+    setInitializing(false);
     setQuery("");
     setImage(null);
     setFailure("");
@@ -396,7 +422,6 @@ export function AskWorkspace({
       const detail = await api.conversation(id);
       if (selection !== selectionRef.current) return;
       setConversation(detail);
-      remember(id);
       setQuery("");
       setImage(null);
       retryRef.current = null;
@@ -415,6 +440,7 @@ export function AskWorkspace({
       return;
     }
     busyRef.current = true;
+    onBusyChange?.(true);
     setLoading(true);
     setFailure("");
     setPendingQuestion(question);
@@ -423,7 +449,6 @@ export function AskWorkspace({
       const current = conversation ?? (await api.createConversation());
       if (!conversation) {
         setConversation(current);
-        remember(current.id);
         updateSession(current);
       }
       const signature = JSON.stringify([
@@ -488,6 +513,7 @@ export function AskWorkspace({
       }
     } finally {
       busyRef.current = false;
+      onBusyChange?.(false);
       setLoading(false);
       setPendingQuestion("");
       textareaRef.current?.focus();
@@ -542,19 +568,34 @@ export function AskWorkspace({
     URL.revokeObjectURL(url);
   };
 
+  const historyGroups = useMemo(() => {
+    const now = new Date();
+    const today = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    ).getTime();
+    const groups = new Map<string, ConversationSummary[]>();
+    for (const item of sessions.filter((item) =>
+      item.title.toLowerCase().includes(search.toLowerCase()),
+    )) {
+      const elapsed = today - item.updated_at * 1000;
+      const label =
+        elapsed < 0
+          ? "Today"
+          : elapsed < 86400000
+            ? "Yesterday"
+            : elapsed < 6 * 86400000
+              ? "Previous 7 days"
+              : "Earlier";
+      groups.set(label, [...(groups.get(label) ?? []), item]);
+    }
+    return Array.from(groups);
+  }, [sessions, search]);
   const history = (
     <>
       <div className="history-heading">
-        <span>Conversations</span>
-        <button
-          type="button"
-          onClick={newChat}
-          disabled={loading}
-          aria-label="New conversation"
-          title="New conversation"
-        >
-          <Plus className="size-4" />
-        </button>
+        <span>Recent conversations</span>
       </div>
       <label className="history-search">
         <Search className="size-4" />
@@ -566,79 +607,97 @@ export function AskWorkspace({
         />
       </label>
       <div className="history-list">
-        {sessions
-          .filter((item) =>
-            item.title.toLowerCase().includes(search.toLowerCase()),
-          )
-          .map((item) => (
-            <div
-              className={cn(
-                "history-row",
-                conversation?.id === item.id && "active",
-              )}
-              key={item.id}
-            >
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => void openChat(item.id)}
-                className="history-select"
+        {historyGroups.map(([label, items]) => (
+          <div key={label}>
+            <p className="history-group-label">{label}</p>
+            {items.map((item) => (
+              <div
+                className={cn(
+                  "history-row",
+                  conversation?.id === item.id && "active",
+                )}
+                key={item.id}
               >
-                <span>{item.title}</span>
-                <small>
-                  {new Date(item.updated_at * 1000).toLocaleDateString(
-                    undefined,
-                    { month: "short", day: "numeric" },
-                  )}
-                </small>
-              </button>
-              <div className="history-tools">
                 <button
                   type="button"
                   disabled={loading}
-                  title="Rename conversation"
-                  aria-label={`Rename ${item.title}`}
-                  onClick={() => {
-                    setRenameId(item.id);
-                    setRenameTitle(item.title);
-                  }}
+                  onClick={() => void openChat(item.id)}
+                  className="history-select"
+                  aria-current={
+                    conversation?.id === item.id ? "true" : undefined
+                  }
+                  title={item.title}
                 >
-                  <Pencil className="size-3.5" />
+                  <span>{item.title}</span>
                 </button>
-                <button
-                  type="button"
-                  disabled={loading}
-                  title="Delete conversation"
-                  aria-label={`Delete ${item.title}`}
-                  onClick={() => setDeleteId(item.id)}
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="history-menu icon-button"
+                      disabled={loading}
+                      aria-label={`Actions for ${item.title}`}
+                      title="Conversation actions"
+                    >
+                      <MoreHorizontal size={16} />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" side="right">
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        setRenameId(item.id);
+                        setRenameTitle(item.title);
+                      }}
+                    >
+                      <Pencil /> Rename
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onSelect={() => setDeleteId(item.id)}
+                    >
+                      <Trash2 /> Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-            </div>
-          ))}
-        {sessions.length === 0 && (
-          <p className="history-empty">No conversations yet.</p>
+            ))}
+          </div>
+        ))}
+        {historyGroups.length === 0 && (
+          <p className="history-empty">
+            {search ? "No matching conversations." : "No conversations yet."}
+          </p>
         )}
-      </div>
-      <div className="history-footer">
-        <span className={cn("status-dot", !indexReady && "empty")} />
-        {indexReady ? "Library ready" : "No sources added"}
       </div>
     </>
   );
 
   return (
     <div className="study-chat">
-      <aside className="conversation-sidebar">{history}</aside>
-      <section className="conversation-main" aria-label="Study conversation">
+      <aside className="workspace-sidebar">
+        {sidebarHeader}
+        {history}
+        {sidebarFooter}
+      </aside>
+      <section
+        className={cn(
+          "conversation-main",
+          !initializing &&
+            !connectionError &&
+            !conversation?.messages.length &&
+            !loading &&
+            "is-opening",
+        )}
+        aria-label="Study conversation"
+      >
         <div className="conversation-toolbar">
           <Button
             variant="ghost"
             size="icon-sm"
-            className="lg:hidden"
+            className="conversation-history-button"
             onClick={() => setHistoryOpen(true)}
             aria-label="Open conversations"
+            title="Open conversations"
           >
             <History />
           </Button>
@@ -668,7 +727,7 @@ export function AskWorkspace({
         <div className="conversation-scroll">
           {connectionError ? (
             <div className="chat-empty">
-              <MessageSquare className="size-8 text-ink-faint" />
+              <MessageSquare className="mb-5 size-7 text-ink-faint" />
               <h2>Unable to load conversations</h2>
               <p>{connectionError}</p>
               <Button variant="outline" onClick={() => void load()}>
@@ -677,67 +736,73 @@ export function AskWorkspace({
             </div>
           ) : initializing ? (
             <div className="chat-empty" role="status">
-              <LoaderCircle className="size-6 animate-spin text-ink-muted" />
-              <p>Loading conversation...</p>
+              <div
+                className="loading-lines max-w-sm"
+                aria-label="Loading conversations"
+              >
+                <span />
+                <span />
+                <span />
+              </div>
             </div>
           ) : !conversation?.messages.length && !loading ? (
             <div className="chat-empty">
-              <img src="/favicon.svg" alt="" width="44" height="44" />
+              <img
+                className="empty-mark"
+                src="/favicon.svg"
+                alt=""
+                width="42"
+                height="42"
+              />
               <h2>What are you studying?</h2>
-              <p>
-                {indexReady
-                  ? "Your sources are ready."
-                  : "Start a conversation or add material to your library."}
-              </p>
-              <div className="empty-suggestions">
-                {[
-                  "Explain a concept",
-                  "Compare two ideas",
-                  "Work through a problem",
-                ].map((text) => (
-                  <button
-                    type="button"
-                    key={text}
-                    onClick={() => {
-                      setQuery(text + ": ");
-                      textareaRef.current?.focus();
-                    }}
-                  >
-                    {text}
-                  </button>
-                ))}
-              </div>
+              <button
+                type="button"
+                className="empty-library"
+                onClick={onOpenLibrary}
+              >
+                <FileText size={14} />
+                {sourceCount
+                  ? `${sourceCount} sources in your library`
+                  : "Add study material"}
+                <ChevronDown size={13} className="-rotate-90" />
+              </button>
             </div>
           ) : null}
-          {!initializing && (
-            <div className="conversation-transcript">
-              {conversation?.messages.map((message) =>
-                message.role === "assistant" ? (
-                  <AnswerMessage key={message.id} message={message} />
-                ) : (
-                  <div className="user-message" key={message.id}>
-                    <span>You</span>
-                    <p>{message.content}</p>
-                  </div>
-                ),
-              )}
-              {loading && (
-                <>
-                  <div className="user-message">
-                    <span>You</span>
-                    <p>{pendingQuestion}</p>
-                  </div>
-                  <div className="generation-status" role="status">
-                    <LoaderCircle className="size-4 animate-spin" />
-                    <span>Preparing your answer...</span>
-                  </div>
-                </>
-              )}
-              <div ref={endRef} />
-            </div>
-          )}
+          {!initializing &&
+            (Boolean(conversation?.messages.length) || loading) && (
+              <div className="conversation-transcript">
+                {conversation?.messages.map((message) =>
+                  message.role === "assistant" ? (
+                    <AnswerMessage key={message.id} message={message} />
+                  ) : (
+                    <div className="user-message" key={message.id}>
+                      <span>You</span>
+                      <p>{message.content}</p>
+                    </div>
+                  ),
+                )}
+                {loading && (
+                  <>
+                    <div className="user-message">
+                      <span>You</span>
+                      <p>{pendingQuestion}</p>
+                    </div>
+                    <div className="generation-status" role="status">
+                      <LoaderCircle className="size-4 animate-spin" />
+                      <span>Preparing your answer...</span>
+                    </div>
+                  </>
+                )}
+                <div ref={endRef} />
+              </div>
+            )}
         </div>
-        <div className="composer-region">
+        <div
+          className={cn(
+            "composer-region",
+            !conversation?.messages.length && !loading && "opening",
+          )}
+        >
           {failure && (
             <div className="request-error" role="alert">
               <p>{failure}</p>
@@ -821,20 +886,43 @@ export function AskWorkspace({
               >
                 <Paperclip />
               </Button>
-              <select
-                aria-label="Knowledge scope"
+              <Select
                 value={scope}
                 disabled={loading || Boolean(image)}
-                onChange={(event) =>
-                  setScope(event.target.value as AnswerScope)
-                }
+                onValueChange={(value) => setScope(value as AnswerScope)}
               >
-                {scopes.map((item) => (
-                  <option value={item.value} key={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger
+                  className="scope-trigger"
+                  aria-label="Knowledge scope"
+                  size="sm"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent
+                  className="scope-menu"
+                  position="popper"
+                  side="top"
+                  align="start"
+                  sideOffset={8}
+                >
+                  {scopes.map((item) => (
+                    <SelectItem
+                      className="scope-option"
+                      value={item.value}
+                      key={item.value}
+                    >
+                      {item.value === "auto" ? (
+                        <Sparkles size={16} />
+                      ) : item.value === "sources_only" ? (
+                        <FileText size={16} />
+                      ) : (
+                        <Globe2 size={16} />
+                      )}
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {image && (
                 <span className="text-xs text-ink-muted">Image question</span>
               )}
@@ -865,21 +953,21 @@ export function AskWorkspace({
                 ? "Generating"
                 : conversation
                   ? "Conversation saved"
-                  : "New conversation"}
+                  : ""}
             </span>
-            <span>
-              {query.length > 3500 ? `${query.length}/4000` : "Verity Study"}
-            </span>
+            <span>{query.length > 3500 ? `${query.length}/4000` : ""}</span>
           </div>
         </div>
       </section>
       <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
-        <SheetContent side="left" className="bg-card p-4">
+        <SheetContent side="left" className="navigation-sheet">
           <SheetHeader className="sr-only">
             <SheetTitle>Conversations</SheetTitle>
             <SheetDescription>Saved conversations</SheetDescription>
           </SheetHeader>
+          <div className="pt-14" />
           {history}
+          {sidebarFooter}
         </SheetContent>
       </Sheet>
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
@@ -891,18 +979,18 @@ export function AskWorkspace({
           <div className="conversation-settings">
             <label>
               Retrieval
-              <select
+              <SelectField
+                label="Retrieval"
                 value={mode}
                 disabled={loading}
-                onChange={(event) =>
-                  setMode(event.target.value as RetrievalMode)
-                }
-              >
-                <option value="full">Full pipeline</option>
-                <option value="hybrid">Hybrid</option>
-                <option value="dense_only">Semantic</option>
-                <option value="bm25_only">Keyword</option>
-              </select>
+                onValueChange={(value) => setMode(value as RetrievalMode)}
+                options={[
+                  { value: "full", label: "Full pipeline" },
+                  { value: "hybrid", label: "Hybrid" },
+                  { value: "dense_only", label: "Semantic" },
+                  { value: "bm25_only", label: "Keyword" },
+                ]}
+              />
             </label>
             <label>
               Evidence passages
@@ -928,6 +1016,7 @@ export function AskWorkspace({
             <div>
               <span>Source diversity</span>
               <Switch
+                aria-label="Source diversity"
                 checked={comprehensive}
                 disabled={loading}
                 onCheckedChange={setComprehensive}
@@ -936,6 +1025,7 @@ export function AskWorkspace({
             <div>
               <span>Detect source conflicts</span>
               <Switch
+                aria-label="Detect source conflicts"
                 checked={contradictions}
                 disabled={loading}
                 onCheckedChange={setContradictions}
@@ -944,6 +1034,7 @@ export function AskWorkspace({
             <div>
               <span>Use library for images</span>
               <Switch
+                aria-label="Use library for images"
                 checked={useKnowledgeBase}
                 disabled={loading}
                 onCheckedChange={setUseKnowledgeBase}
@@ -952,6 +1043,7 @@ export function AskWorkspace({
             <div>
               <span>Save images to library</span>
               <Switch
+                aria-label="Save images to library"
                 checked={saveImage}
                 disabled={loading}
                 onCheckedChange={setSaveImage}

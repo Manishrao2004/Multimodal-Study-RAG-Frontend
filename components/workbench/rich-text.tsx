@@ -24,7 +24,7 @@ export function RichText({
   });
 
   return (
-    <div className="rich-text text-[16px] leading-8 text-ink">
+    <div className="rich-text">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -63,21 +63,9 @@ export function RichText({
               </a>
             );
           },
-          h1: ({ children: headingChildren }) => (
-            <h1 className="mt-8 text-2xl font-semibold tracking-[-0.025em] first:mt-0">
-              {headingChildren}
-            </h1>
-          ),
-          h2: ({ children: headingChildren }) => (
-            <h2 className="mt-7 text-xl font-semibold tracking-[-0.02em] first:mt-0">
-              {headingChildren}
-            </h2>
-          ),
-          h3: ({ children: headingChildren }) => (
-            <h3 className="mt-6 text-[17px] font-semibold first:mt-0">
-              {headingChildren}
-            </h3>
-          ),
+          h1: ({ children: headingChildren }) => <h1>{headingChildren}</h1>,
+          h2: ({ children: headingChildren }) => <h2>{headingChildren}</h2>,
+          h3: ({ children: headingChildren }) => <h3>{headingChildren}</h3>,
           p: ({ children: paragraphChildren }) => (
             <p className="mb-4 last:mb-0">{paragraphChildren}</p>
           ),
@@ -95,7 +83,7 @@ export function RichText({
             <li className="pl-1">{itemChildren}</li>
           ),
           blockquote: ({ children: quoteChildren }) => (
-            <blockquote className="my-5 border-l-2 border-cyan pl-4 text-ink-muted">
+            <blockquote className="my-5 border-l border-line pl-4 text-ink-muted">
               {quoteChildren}
             </blockquote>
           ),

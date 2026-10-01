@@ -26,7 +26,8 @@ Open `http://localhost:5173`.
 ## Conversations
 
 Conversation transcripts and complete answer metadata are persisted by the
-backend. The browser stores only the selected conversation ID. Older browser
+backend. A fresh launch opens a new conversation without selecting old history.
+Older browser
 sessions are imported once, without removing their original local storage.
 
 The workspace supports conversation search, rename, delete, Markdown export,
@@ -40,3 +41,10 @@ and document ingestion allows ten. The backend continues to own conversation
 state if a browser request times out.
 
 Validation: `npm run build`, `npm run lint`, and `npx tsc --noEmit --incremental false`.
+
+## Interface
+
+The workspace is dark-only. Navigation and searchable history share one sidebar;
+mobile navigation, settings, and evidence open only on request. General-knowledge
+and document-supported answer provenance remain distinct. The design system is
+documented in `DESIGN.md`, with product constraints in `PRODUCT.md`.
