@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
   Braces,
   Clock3,
@@ -35,7 +35,8 @@ function locator(item: EvidenceItem) {
   if (chunk.type === "audio" && chunk.timestamp_start != null) {
     return `${chunk.source_file} · ${formatTimestamp(chunk.timestamp_start)}`;
   }
-  if (chunk.page_number != null) return `${chunk.source_file} · page ${chunk.page_number}`;
+  if (chunk.page_number != null)
+    return `${chunk.source_file} · page ${chunk.page_number}`;
   return chunk.source_file;
 }
 
@@ -43,10 +44,17 @@ interface EvidencePanelProps {
   items: EvidenceItem[];
   title?: string;
   compact?: boolean;
+  idPrefix?: string;
 }
 
-export function EvidencePanel({ items, title = "Source evidence", compact = false }: EvidencePanelProps) {
+export function EvidencePanel({
+  items,
+  title = "Source evidence",
+  compact = false,
+  idPrefix = "evidence",
+}: EvidencePanelProps) {
   const [selected, setSelected] = useState<EvidenceItem | null>(null);
+  const headingId = useId();
 
   if (!items.length) return null;
 
@@ -60,46 +68,90 @@ export function EvidencePanel({ items, title = "Source evidence", compact = fals
   );
 
   return (
-    <section aria-labelledby="evidence-heading" className="space-y-3">
+    <section aria-labelledby={headingId} className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
           <p className="eyebrow">Sources</p>
-          <h3 id="evidence-heading" className="mt-1 text-base font-semibold text-ink">{title}</h3>
+          <h3 id={headingId} className="mt-1 text-base font-semibold text-ink">
+            {title}
+          </h3>
         </div>
-        <Badge variant="outline" className="rounded-full border-line bg-card text-ink-muted">
-          {grouped.length} source{grouped.length === 1 ? "" : "s"} · {items.length} passages
+        <Badge
+          variant="outline"
+          className="rounded-full border-line bg-card text-ink-muted"
+        >
+          {grouped.length} source{grouped.length === 1 ? "" : "s"} ·{" "}
+          {items.length} passages
         </Badge>
       </div>
 
       <div className={cn("space-y-3", compact && "space-y-2")}>
         {grouped.map(([source, sourceItems]) => {
-          const strongest = Math.max(...sourceItems.map((item) => item.attribution_percent ?? 0));
+          const contributionTotal = sourceItems.reduce(
+            (total, item) => total + (item.attribution_percent ?? 0),
+            0,
+          );
           return (
-            <div key={source} className="overflow-hidden rounded-2xl border border-line bg-card">
+            <div
+              key={source}
+              className="overflow-hidden rounded-2xl border border-line bg-card"
+            >
               <div className="flex items-center gap-3 border-b border-line bg-canvas/60 px-4 py-3">
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-cyan-soft text-cyan-deep"><FileText className="size-4" /></span>
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-cyan-soft text-cyan-deep">
+                  <FileText className="size-4" />
+                </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink">{source}</p>
-                  <p className="text-xs text-ink-muted">{sourceItems.length} cited passage{sourceItems.length === 1 ? "" : "s"}</p>
+                  <p className="truncate text-sm font-semibold text-ink">
+                    {source}
+                  </p>
+                  <p className="text-xs text-ink-muted">
+                    {sourceItems.length} retrieved passage
+                    {sourceItems.length === 1 ? "" : "s"}
+                  </p>
                 </div>
-                {strongest > 0 && <Badge variant="outline" className="rounded-full font-mono text-[10px]">top {strongest.toFixed(0)}%</Badge>}
+                {contributionTotal > 0 && (
+                  <Badge
+                    variant="outline"
+                    className="rounded-full font-mono text-[10px]"
+                  >
+                    {contributionTotal.toFixed(1)}% contribution
+                  </Badge>
+                )}
               </div>
               <div className="divide-y divide-line">
                 {sourceItems.map((item) => {
                   const index = items.indexOf(item);
                   const Icon = typeIcons[item.chunk.type];
-                  const contribution = item.attribution_percent ?? Math.max(0, item.rerank_score * 100);
+                  const contribution = item.attribution_percent;
                   return (
-                    <button id={`evidence-${index + 1}`} type="button" key={item.chunk.chunk_id} onClick={() => setSelected(item)} className="group flex w-full min-w-0 items-start gap-3 px-4 py-3 text-left transition hover:bg-cyan-soft/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyan/50">
-                      <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg border border-line bg-card text-ink-muted"><Icon className="size-3.5" /></span>
+                    <button
+                      id={`${idPrefix}-${index + 1}`}
+                      type="button"
+                      key={item.chunk.chunk_id}
+                      onClick={() => setSelected(item)}
+                      className="group flex w-full min-w-0 items-start gap-3 px-4 py-3 text-left transition hover:bg-cyan-soft/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyan/50"
+                    >
+                      <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg border border-line bg-card text-ink-muted">
+                        <Icon className="size-3.5" />
+                      </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-[11px] font-bold text-cyan-deep">[{index + 1}]</span>
-                          <span className="truncate text-xs font-medium text-ink-muted">{item.chunk.section_path || locator(item)}</span>
+                          <span className="font-mono text-[11px] font-bold text-cyan-deep">
+                            [{index + 1}]
+                          </span>
+                          <span className="truncate text-xs font-medium text-ink-muted">
+                            {item.chunk.section_path || locator(item)}
+                          </span>
                         </div>
-                        <p className="mt-1 line-clamp-2 text-sm leading-5 text-ink-muted">{item.chunk.text}</p>
+                        <p className="mt-1 line-clamp-2 text-sm leading-5 text-ink-muted">
+                          {item.chunk.text}
+                        </p>
                       </div>
-                      <span className="mt-1 shrink-0 font-mono text-[10px] text-ink-faint">{contribution.toFixed(0)}%</span>
+                      {contribution != null && (
+                        <span className="mt-1 shrink-0 font-mono text-[10px] text-ink-faint">
+                          {contribution.toFixed(1)}%
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -109,7 +161,10 @@ export function EvidencePanel({ items, title = "Source evidence", compact = fals
         })}
       </div>
 
-      <Sheet open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}>
+      <Sheet
+        open={Boolean(selected)}
+        onOpenChange={(open) => !open && setSelected(null)}
+      >
         <SheetContent className="w-full gap-0 overflow-y-auto border-line bg-canvas p-0 sm:max-w-xl">
           {selected && (
             <>
@@ -118,10 +173,16 @@ export function EvidencePanel({ items, title = "Source evidence", compact = fals
                   <Badge className="rounded-full bg-cyan-soft text-cyan-deep hover:bg-cyan-soft">
                     {selected.chunk.type}
                   </Badge>
-                  <span className="font-mono text-xs text-ink-faint">{selected.chunk.chunk_id}</span>
+                  <span className="font-mono text-xs text-ink-faint">
+                    {selected.chunk.chunk_id}
+                  </span>
                 </div>
-                <SheetTitle className="text-xl text-ink">{selected.chunk.section_path || "Evidence detail"}</SheetTitle>
-                <SheetDescription className="text-ink-muted">{locator(selected)}</SheetDescription>
+                <SheetTitle className="text-xl text-ink">
+                  {selected.chunk.section_path || "Evidence detail"}
+                </SheetTitle>
+                <SheetDescription className="text-ink-muted">
+                  {locator(selected)}
+                </SheetDescription>
               </SheetHeader>
 
               <div className="space-y-5 p-6">
@@ -143,13 +204,19 @@ export function EvidencePanel({ items, title = "Source evidence", compact = fals
                     <Braces className="size-4 text-cyan-deep" />
                     Retrieved content
                   </div>
-                  <p className="whitespace-pre-wrap text-[15px] leading-7 text-ink-muted">{selected.chunk.text}</p>
+                  <p className="whitespace-pre-wrap text-[15px] leading-7 text-ink-muted">
+                    {selected.chunk.text}
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="metric-tile">
                     <span>Answer contribution</span>
-                    <strong>{(selected.attribution_percent ?? 0).toFixed(1)}%</strong>
+                    <strong>
+                      {selected.attribution_percent == null
+                        ? "Not recorded"
+                        : `${selected.attribution_percent.toFixed(1)}%`}
+                    </strong>
                   </div>
                   <div className="metric-tile">
                     <span>Rerank score</span>
@@ -157,8 +224,16 @@ export function EvidencePanel({ items, title = "Source evidence", compact = fals
                   </div>
                 </div>
 
-                <Button variant="outline" className="w-full rounded-xl border-line bg-card" asChild>
-                  <a href={`${API_BASE}/evidence/${encodeURIComponent(selected.chunk.chunk_id)}`} target="_blank" rel="noreferrer">
+                <Button
+                  variant="outline"
+                  className="w-full rounded-xl border-line bg-card"
+                  asChild
+                >
+                  <a
+                    href={`${API_BASE}/evidence/${encodeURIComponent(selected.chunk.chunk_id)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
                     <Layers3 /> Open raw evidence
                   </a>
                 </Button>

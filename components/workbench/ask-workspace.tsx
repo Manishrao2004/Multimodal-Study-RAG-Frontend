@@ -1,32 +1,47 @@
 "use client";
 
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+/* eslint-disable @next/next/no-img-element -- Screenshot object URLs and the static SVG are rendered directly. */
+
+import {
+  FormEvent,
+  KeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ArrowUp,
-  Bot,
-  CheckCircle2,
+  Check,
   ChevronDown,
-  ClipboardPaste,
-  Gauge,
+  Copy,
+  Download,
+  FileText,
   History,
   LoaderCircle,
   MessageSquare,
   Paperclip,
-  ScanSearch,
+  Pencil,
+  Plus,
+  Search,
   Settings2,
-  ShieldCheck,
-  Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-
-import { api } from "@/lib/api";
-import type { AnswerScope, AskResponse, ConversationTurn, EvidenceItem, RetrievalMode, ScreenshotAskResponse } from "@/lib/rag-types";
+import { api, ApiError } from "@/lib/api";
+import type {
+  AnswerScope,
+  AskResponse,
+  ConversationDetail,
+  ConversationSummary,
+  RetrievalMode,
+  ScreenshotAskResponse,
+  StoredMessage,
+} from "@/lib/rag-types";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
   Sheet,
@@ -34,675 +49,962 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { EvidencePanel } from "@/components/workbench/evidence-panel";
 import { RichText } from "@/components/workbench/rich-text";
 
-const promptIdeas = [
-  "Explain the key idea and cite the strongest evidence",
-  "What do my sources disagree about?",
-  "Turn this topic into a concise exam answer",
+const ACTIVE_KEY = "verity-active-conversation";
+type Answer = AskResponse | ScreenshotAskResponse;
+const scopes: { value: AnswerScope; label: string }[] = [
+  { value: "auto", label: "Auto" },
+  { value: "sources_only", label: "My sources" },
+  { value: "model_only", label: "General knowledge" },
 ];
+function isAsk(result: Answer): result is AskResponse {
+  return "answer_basis" in result;
+}
+function errorMessage(error: unknown) {
+  return error instanceof Error
+    ? error.message
+    : "Something went wrong. Please try again.";
+}
 
-const modes: { value: RetrievalMode; label: string; detail: string }[] = [
-  { value: "full", label: "Full pipeline", detail: "HyDE + hybrid retrieval + reranking" },
-  { value: "hybrid", label: "Hybrid", detail: "BM25 + dense retrieval with fusion" },
-  { value: "dense_only", label: "Dense only", detail: "Semantic vector retrieval" },
-  { value: "bm25_only", label: "BM25 only", detail: "Exact lexical retrieval" },
-];
-
-const answerScopes: { value: AnswerScope; label: string; detail: string }[] = [
-  { value: "auto", label: "Auto", detail: "Use sources first, then clearly labelled model knowledge when needed" },
-  { value: "sources_only", label: "My sources only", detail: "Answer strictly from uploaded study material" },
-  { value: "model_only", label: "General knowledge", detail: "Use the underlying model without document citations" },
-];
-
-type Result = AskResponse | ScreenshotAskResponse;
-type ChatMessage = ConversationTurn & { id: string; evidence?: EvidenceItem[] };
-type ChatSession = { id: string; title: string; createdAt: number; updatedAt: number; messages: ChatMessage[] };
-type ChatState = { activeId: string; sessions: ChatSession[] };
-const CHAT_STORAGE_KEY = "verity-study-chat-sessions-v1";
-const LEGACY_CHAT_STORAGE_KEY = "verity-study-chat-v1";
-
-function createSession(messages: ChatMessage[] = []): ChatSession {
-  const now = Date.now();
-  const firstQuestion = messages.find((message) => message.role === "user")?.content;
-  return {
-    id: crypto.randomUUID(),
-    title: firstQuestion?.slice(0, 56) || "New study chat",
-    createdAt: now,
-    updatedAt: now,
-    messages,
+function AnswerMessage({ message }: { message: StoredMessage }) {
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [groundingOpen, setGroundingOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const result = message.result;
+  const evidence = result?.evidence ?? [];
+  const basis = result && isAsk(result) ? result.answer_basis : "sources";
+  const tokens = result && isAsk(result) ? result.token_grounding : null;
+  const showCitation = (marker: number) => {
+    setEvidenceOpen(true);
+    window.requestAnimationFrame(() =>
+      document
+        .getElementById(`evidence-${message.id}-${marker}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" }),
+    );
   };
-}
-
-function loadChatState(): ChatState {
-  if (typeof window === "undefined") return { activeId: "", sessions: [] };
-  try {
-    const saved = JSON.parse(window.localStorage.getItem(CHAT_STORAGE_KEY) ?? "null") as ChatState | null;
-    if (saved?.activeId && Array.isArray(saved.sessions)) return saved;
-    const legacy = JSON.parse(window.localStorage.getItem(LEGACY_CHAT_STORAGE_KEY) ?? "[]") as ChatMessage[];
-    if (Array.isArray(legacy) && legacy.length) {
-      const migrated = createSession(legacy.slice(-30));
-      return { activeId: migrated.id, sessions: [migrated] };
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Could not copy the answer.");
     }
-  } catch {
-    // A malformed browser entry should never stop the study workspace loading.
-  }
-  const initial = createSession();
-  return { activeId: initial.id, sessions: [initial] };
+  };
+  return (
+    <article className="answer-message">
+      <div className="answer-meta">
+        <span className="font-semibold text-ink">Verity</span>
+        <span
+          className={cn(
+            "provenance-dot",
+            basis === "mixed" && "mixed",
+            basis === "model" && "model",
+          )}
+        />
+        <span>
+          {basis === "model"
+            ? "General knowledge"
+            : basis === "mixed"
+              ? "Sources + general knowledge"
+              : "From your sources"}
+        </span>
+        <time
+          className="ml-auto"
+          dateTime={new Date(message.created_at * 1000).toISOString()}
+        >
+          {new Date(message.created_at * 1000).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </time>
+      </div>
+      <div className="answer-body">
+        <RichText evidence={evidence} onCitationClick={showCitation}>
+          {message.content}
+        </RichText>
+      </div>
+      {result &&
+        isAsk(result) &&
+        result.provenance_notice &&
+        basis !== "sources" && (
+          <details className="answer-provenance">
+            <summary>Answer provenance</summary>
+            <p>{result.provenance_notice}</p>
+          </details>
+        )}
+      {result &&
+        isAsk(result) &&
+        result.disagreements.map((item) => (
+          <p
+            className="answer-notice conflict"
+            key={`${item.chunk_id_a}-${item.chunk_id_b}`}
+          >
+            {item.explanation ||
+              `${item.source_a} and ${item.source_b} disagree.`}
+          </p>
+        ))}
+      {result && !isAsk(result) && (
+        <details className="mt-4 text-sm text-ink-muted">
+          <summary>Image analysis</summary>
+          <p className="mt-2 whitespace-pre-wrap">{result.image_analysis}</p>
+        </details>
+      )}
+      <div className="answer-actions">
+        {evidence.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setEvidenceOpen(!evidenceOpen)}
+            aria-expanded={evidenceOpen}
+          >
+            <FileText className="size-3.5" />
+            {evidence.length} evidence passages
+            <ChevronDown
+              className={cn("size-3", evidenceOpen && "rotate-180")}
+            />
+          </button>
+        )}
+        {tokens?.length ? (
+          <button
+            type="button"
+            onClick={() => setGroundingOpen(!groundingOpen)}
+            aria-expanded={groundingOpen}
+          >
+            Grounding{" "}
+            {result?.grounding_ratio == null
+              ? ""
+              : `${Math.round(result.grounding_ratio * 100)}%`}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => void copy()}
+          aria-label="Copy answer"
+          title="Copy answer"
+          className="ml-auto"
+        >
+          {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+        </button>
+      </div>
+      {evidenceOpen && (
+        <div className="evidence-drawer">
+          <EvidencePanel
+            items={evidence}
+            title="Evidence"
+            compact
+            idPrefix={`evidence-${message.id}`}
+          />
+          {result?.citation_validity_rate != null && (
+            <p className="mt-3 text-xs text-ink-muted">
+              Citation validity:{" "}
+              {Math.round(result.citation_validity_rate * 100)}%
+            </p>
+          )}
+        </div>
+      )}
+      {groundingOpen && tokens && (
+        <div className="token-drawer" aria-label="Token grounding">
+          {tokens.map((token, index) => (
+            <span
+              key={index}
+              title={`${token.match_type}: ${Math.round(token.score * 100)}%`}
+              className={cn(
+                token.score >= 0.8
+                  ? "token-grounded"
+                  : token.score >= 0.45
+                    ? "token-partial"
+                    : "token-unsupported",
+              )}
+            >
+              {token.token}{" "}
+            </span>
+          ))}
+        </div>
+      )}
+    </article>
+  );
 }
 
-function isAskResult(result: Result): result is AskResponse {
-  return "mode" in result;
-}
-
-export function AskWorkspace({ indexReady, onLibraryChanged }: { indexReady: boolean; onLibraryChanged?: () => void }) {
+export function AskWorkspace({
+  indexReady,
+  onLibraryChanged,
+}: {
+  indexReady: boolean;
+  onLibraryChanged?: () => void;
+}) {
+  const [sessions, setSessions] = useState<ConversationSummary[]>([]);
+  const [conversation, setConversation] = useState<ConversationDetail | null>(
+    null,
+  );
   const [query, setQuery] = useState("");
-  const [activeQuestion, setActiveQuestion] = useState("");
-  const [mode, setMode] = useState<RetrievalMode>("full");
-  const [answerScope, setAnswerScope] = useState<AnswerScope>("auto");
-  const [topK, setTopK] = useState(5);
-  const [detectContradictions, setDetectContradictions] = useState(true);
-  const [useKnowledgeBase, setUseKnowledgeBase] = useState(true);
-  const [saveScreenshot, setSaveScreenshot] = useState(false);
-  const [image, setImage] = useState<File | null>(null);
-  const [result, setResult] = useState<Result | null>(null);
+  const [search, setSearch] = useState("");
+  const [initializing, setInitializing] = useState(true);
+  const [connectionError, setConnectionError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showGrounding, setShowGrounding] = useState(false);
+  const [pendingQuestion, setPendingQuestion] = useState("");
+  const [failure, setFailure] = useState("");
+  const [image, setImage] = useState<File | null>(null);
+  const preview = useMemo(
+    () => (image ? URL.createObjectURL(image) : null),
+    [image],
+  );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [scope, setScope] = useState<AnswerScope>("auto");
+  const [mode, setMode] = useState<RetrievalMode>("full");
+  const [topK, setTopK] = useState(5);
   const [comprehensive, setComprehensive] = useState(false);
-  const [chatState, setChatState] = useState<ChatState>({ activeId: "", sessions: [] });
+  const [contradictions, setContradictions] = useState(true);
+  const [useKnowledgeBase, setUseKnowledgeBase] = useState(true);
+  const [saveImage, setSaveImage] = useState(false);
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameTitle, setRenameTitle] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const conversationEndRef = useRef<HTMLDivElement>(null);
-  const storageLoadedRef = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
+  const busyRef = useRef(false);
+  const selectionRef = useRef(0);
+  const retryRef = useRef<{ signature: string; id: string } | null>(null);
 
-  const preview = useMemo(() => (image ? URL.createObjectURL(image) : null), [image]);
-  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
-
-  const chatMessages = useMemo(
-    () => chatState.sessions.find((session) => session.id === chatState.activeId)?.messages ?? [],
-    [chatState],
-  );
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      const stored = loadChatState();
-      storageLoadedRef.current = true;
-      setChatState(stored);
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-
-  useEffect(() => {
-    if (!storageLoadedRef.current) return;
-    window.localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(chatState));
-  }, [chatState]);
-
-  useEffect(() => {
-    if (result || loading) {
-      conversationEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  const remember = (id: string) => {
+    try {
+      window.localStorage.setItem(ACTIVE_KEY, id);
+    } catch {
+      /* Server remains the source of truth. */
     }
-  }, [result, loading]);
-
-  const startNewChat = () => {
-    const session = createSession();
-    setChatState((current) => ({ activeId: session.id, sessions: [session, ...current.sessions].slice(0, 30) }));
-    setResult(null);
-    setQuery("");
-    setActiveQuestion("");
-    setImage(null);
-    setHistoryOpen(false);
-    toast.success("Started a new study chat");
   };
-
-  const openChat = (sessionId: string) => {
-    setChatState((current) => ({ ...current, activeId: sessionId }));
-    setResult(null);
-    setQuery("");
-    setActiveQuestion("");
-    setImage(null);
-    setHistoryOpen(false);
-  };
-
-  const appendMessages = (messages: ChatMessage[]) => {
-    setChatState((current) => ({
-      ...current,
-      sessions: current.sessions.map((session) => {
-        if (session.id !== current.activeId) return session;
-        const nextMessages = [...session.messages, ...messages].slice(-30);
-        const firstQuestion = nextMessages.find((message) => message.role === "user")?.content;
-        return { ...session, title: firstQuestion?.slice(0, 56) || session.title, updatedAt: Date.now(), messages: nextMessages };
-      }).sort((a, b) => b.updatedAt - a.updatedAt),
-    }));
-  };
-
-  useEffect(() => {
-    const handlePaste = (event: ClipboardEvent) => {
-      const pasted = Array.from(event.clipboardData?.files ?? []).find((file) => file.type.startsWith("image/"));
-      if (pasted) {
-        setImage(pasted);
-        toast.success("Screenshot attached");
-      }
-    };
-    window.addEventListener("paste", handlePaste);
-    return () => window.removeEventListener("paste", handlePaste);
+  const updateSession = useCallback((detail: ConversationDetail) => {
+    setSessions((current) =>
+      [detail, ...current.filter((item) => item.id !== detail.id)].sort(
+        (a, b) => b.updated_at - a.updated_at,
+      ),
+    );
   }, []);
-
-  useEffect(() => {
-    type ModelToolContext = {
-      registerTool: (tool: {
-        name: string;
-        title: string;
-        description: string;
-        inputSchema: object;
-        annotations: { readOnlyHint: boolean; untrustedContentHint: boolean };
-        execute: (input: unknown) => Promise<unknown>;
-      }, options: { signal: AbortSignal }) => void | Promise<void>;
-    };
-    const context = (document as Document & { modelContext?: ModelToolContext }).modelContext;
-    if (!context?.registerTool) return;
-
-    const lifecycle = new AbortController();
-    void Promise.resolve(context.registerTool({
-      name: "ask_study_library",
-      title: "Ask study library",
-      description: "Ask a grounded question across the indexed study material and show the answer with its evidence in the workspace.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          question: { type: "string", minLength: 1, maxLength: 4000 },
-          evidenceDepth: { type: "integer", minimum: 1, maximum: 20, default: 5 },
-        },
-        required: ["question"],
-        additionalProperties: false,
-      },
-      annotations: { readOnlyHint: true, untrustedContentHint: true },
-      async execute(input) {
-        if (!input || typeof input !== "object") throw new Error("Input must be an object.");
-        const values = input as { question?: unknown; evidenceDepth?: unknown };
-        if (typeof values.question !== "string" || !values.question.trim() || values.question.length > 4000) {
-          throw new Error("question must be a non-empty string up to 4000 characters.");
-        }
-        const depth = typeof values.evidenceDepth === "number" && Number.isInteger(values.evidenceDepth)
-          ? values.evidenceDepth
-          : topK;
-        if (depth < 1 || depth > 20) throw new Error("evidenceDepth must be between 1 and 20.");
-
-        setQuery(values.question.trim());
-        setImage(null);
-        setLoading(true);
-        setResult(null);
-        try {
-          const response = await api.ask({
-            query: values.question.trim(),
-            top_k: depth,
-            mode,
-            detect_contradictions: detectContradictions,
-            comprehensive,
-            history: chatMessages.slice(-12).map(({ role, content }) => ({ role, content })),
-            answer_scope: answerScope,
-          });
-          setResult(response);
-          return {
-            answer: response.answer,
-            evidenceCount: response.evidence.length,
-            groundingRatio: response.grounding_ratio,
-            citationValidityRate: response.citation_validity_rate,
+  const load = useCallback(async () => {
+    setInitializing(true);
+    setConnectionError("");
+    try {
+      try {
+        const raw = window.localStorage.getItem(
+          "verity-study-chat-sessions-v1",
+        );
+        const migrated = window.localStorage.getItem(
+          "verity-chat-migration-v2",
+        );
+        if (raw && !migrated) {
+          const legacy = JSON.parse(raw) as {
+            sessions?: {
+              id: string;
+              title: string;
+              messages: {
+                role: "user" | "assistant";
+                content: string;
+                evidence?: AskResponse["evidence"];
+              }[];
+            }[];
           };
-        } finally {
-          setLoading(false);
+          for (const session of legacy.sessions ?? []) {
+            if (session.messages.length)
+              await api.importConversation({
+                id: session.id,
+                title: session.title.slice(0, 120),
+                messages: session.messages,
+              });
+          }
+          window.localStorage.setItem("verity-chat-migration-v2", "complete");
         }
-      },
-    }, { signal: lifecycle.signal })).catch(() => undefined);
+      } catch {
+        toast.warning(
+          "Some browser history could not be imported. The original history is still stored in this browser.",
+        );
+      }
+      const list = await api.conversations();
+      setSessions(list);
+      let saved: string | null = null;
+      try {
+        saved = window.localStorage.getItem(ACTIVE_KEY);
+      } catch {
+        /* Storage may be disabled. */
+      }
+      const id = list.find((item) => item.id === saved)?.id ?? list[0]?.id;
+      if (id) {
+        const detail = await api.conversation(id);
+        setConversation(detail);
+        remember(id);
+      }
+    } catch (error) {
+      setConnectionError(errorMessage(error));
+    } finally {
+      setInitializing(false);
+    }
+  }, []);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => void load());
+    return () => window.cancelAnimationFrame(frame);
+  }, [load]);
+  useEffect(
+    () => () => {
+      if (preview) URL.revokeObjectURL(preview);
+    },
+    [preview],
+  );
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [conversation?.messages.length, loading]);
+  useEffect(() => {
+    const field = textareaRef.current;
+    if (field) {
+      field.style.height = "auto";
+      field.style.height = `${Math.min(field.scrollHeight, 160)}px`;
+    }
+  }, [query]);
 
-    return () => lifecycle.abort();
-  }, [answerScope, comprehensive, detectContradictions, mode, topK, chatMessages]);
-
-  const submit = async (event?: FormEvent) => {
-    event?.preventDefault();
-    const cleanQuery = query.trim();
-    if (!cleanQuery) return;
-    if (!image && !indexReady) {
-      toast.error("Add study material before asking a knowledge-base question.");
+  const attach = (file: File | undefined) => {
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      toast.error("Choose a PNG, JPEG, or WebP image.");
       return;
     }
-
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Choose an image smaller than 10 MB.");
+      return;
+    }
+    setImage(file);
+  };
+  const newChat = () => {
+    if (busyRef.current) return;
+    selectionRef.current++;
+    setConversation(null);
+    setQuery("");
+    setImage(null);
+    setFailure("");
+    setHistoryOpen(false);
+    retryRef.current = null;
+    textareaRef.current?.focus();
+  };
+  const openChat = async (id: string) => {
+    if (busyRef.current) return;
+    const selection = ++selectionRef.current;
+    setHistoryOpen(false);
+    setInitializing(true);
+    setFailure("");
+    try {
+      const detail = await api.conversation(id);
+      if (selection !== selectionRef.current) return;
+      setConversation(detail);
+      remember(id);
+      setQuery("");
+      setImage(null);
+      retryRef.current = null;
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      if (selection === selectionRef.current) setInitializing(false);
+    }
+  };
+  const submit = async (event?: FormEvent) => {
+    event?.preventDefault();
+    const question = query.trim();
+    if (!question || busyRef.current || initializing || connectionError) return;
+    if (!image && scope === "sources_only" && !indexReady) {
+      setFailure("Add a source to your library before using My sources.");
+      return;
+    }
+    busyRef.current = true;
     setLoading(true);
-    setResult(null);
-    setActiveQuestion(cleanQuery);
+    setFailure("");
+    setPendingQuestion(question);
     setQuery("");
     try {
-      const response = image
-        ? await (() => {
-            const body = new FormData();
-            body.append("question", cleanQuery);
-            body.append("image", image);
-            body.append("use_knowledge_base", String(useKnowledgeBase));
-            body.append("save_to_library", String(saveScreenshot));
-            body.append("top_k", String(topK));
-            return api.visionAsk(body);
-          })()
-        : await api.ask({
-            query: cleanQuery,
-            top_k: topK,
-            mode,
-            detect_contradictions: detectContradictions,
-            comprehensive,
-            history: chatMessages.slice(-12).map(({ role, content }) => ({ role, content })),
-            answer_scope: answerScope,
-          });
-      setResult(response);
-      if (!image) {
-        appendMessages([
-          { id: crypto.randomUUID(), role: "user", content: cleanQuery },
-          { id: crypto.randomUUID(), role: "assistant", content: response.answer.slice(0, 4000), evidence: response.evidence },
-        ]);
+      const current = conversation ?? (await api.createConversation());
+      if (!conversation) {
+        setConversation(current);
+        remember(current.id);
+        updateSession(current);
       }
-      if ("saved" in response && response.saved) onLibraryChanged?.();
+      const signature = JSON.stringify([
+        current.id,
+        current.revision,
+        question,
+        scope,
+        mode,
+        topK,
+        comprehensive,
+        contradictions,
+        image?.name,
+        image?.lastModified,
+        useKnowledgeBase,
+        saveImage,
+      ]);
+      const requestId =
+        retryRef.current?.signature === signature
+          ? retryRef.current.id
+          : crypto.randomUUID();
+      retryRef.current = { signature, id: requestId };
+      let detail: ConversationDetail;
+      if (image) {
+        const body = new FormData();
+        body.append("question", question);
+        body.append("image", image);
+        body.append("request_id", requestId);
+        body.append("revision", String(current.revision));
+        body.append("top_k", String(Math.min(topK, 10)));
+        body.append("use_knowledge_base", String(useKnowledgeBase));
+        body.append("save_to_library", String(saveImage));
+        detail = await api.conversationVision(current.id, body);
+      } else {
+        detail = await api.conversationAsk(current.id, {
+          query: question,
+          request_id: requestId,
+          revision: current.revision,
+          top_k: topK,
+          mode,
+          comprehensive,
+          detect_contradictions: contradictions,
+          answer_scope: scope,
+        });
+      }
+      setConversation(detail);
+      updateSession(detail);
+      retryRef.current = null;
+      setImage(null);
+      const result = detail.messages.at(-1)?.result;
+      if (result && "saved" in result && result.saved) onLibraryChanged?.();
     } catch (error) {
-      setQuery(cleanQuery);
-      toast.error(error instanceof Error ? error.message : "The answer could not be generated.");
+      setQuery(question);
+      setFailure(errorMessage(error));
+      if (error instanceof ApiError && error.status === 409 && conversation) {
+        try {
+          const latest = await api.conversation(conversation.id);
+          setConversation(latest);
+          updateSession(latest);
+        } catch {
+          /* Keep the draft for a later retry. */
+        }
+      }
     } finally {
+      busyRef.current = false;
       setLoading(false);
+      setPendingQuestion("");
+      textareaRef.current?.focus();
     }
   };
-
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      void submit();
+  const rename = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!renameId || !renameTitle.trim()) return;
+    try {
+      const detail = await api.renameConversation(renameId, renameTitle.trim());
+      updateSession(detail);
+      if (conversation?.id === detail.id) setConversation(detail);
+      setRenameId(null);
+    } catch (error) {
+      toast.error(errorMessage(error));
     }
   };
+  const remove = async () => {
+    if (!deleteId) return;
+    try {
+      await api.deleteConversation(deleteId);
+      setSessions((current) => current.filter((item) => item.id !== deleteId));
+      if (conversation?.id === deleteId) newChat();
+      setDeleteId(null);
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  };
+  const exportChat = () => {
+    if (!conversation) return;
+    const text =
+      `# ${conversation.title}\n\n` +
+      conversation.messages
+        .map(
+          (message) =>
+            `## ${message.role === "user" ? "You" : "Verity"}\n\n${message.content}\n` +
+            (message.result?.evidence
+              .map(
+                (item, index) =>
+                  `\n[${index + 1}] ${item.chunk.source_file}${item.chunk.page_number ? `, p.${item.chunk.page_number}` : ""}: ${item.chunk.text}`,
+              )
+              .join("\n") ?? ""),
+        )
+        .join("\n\n");
+    const url = URL.createObjectURL(
+      new Blob([text], { type: "text/markdown" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `verity-${conversation.id.slice(0, 8)}.md`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
-  const evidence = result?.evidence ?? [];
-  const grounding = result && isAskResult(result) ? result.token_grounding : null;
+  const history = (
+    <>
+      <div className="history-heading">
+        <span>Conversations</span>
+        <button
+          type="button"
+          onClick={newChat}
+          disabled={loading}
+          aria-label="New conversation"
+          title="New conversation"
+        >
+          <Plus className="size-4" />
+        </button>
+      </div>
+      <label className="history-search">
+        <Search className="size-4" />
+        <input
+          aria-label="Search conversations"
+          placeholder="Search conversations"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
+      </label>
+      <div className="history-list">
+        {sessions
+          .filter((item) =>
+            item.title.toLowerCase().includes(search.toLowerCase()),
+          )
+          .map((item) => (
+            <div
+              className={cn(
+                "history-row",
+                conversation?.id === item.id && "active",
+              )}
+              key={item.id}
+            >
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void openChat(item.id)}
+                className="history-select"
+              >
+                <span>{item.title}</span>
+                <small>
+                  {new Date(item.updated_at * 1000).toLocaleDateString(
+                    undefined,
+                    { month: "short", day: "numeric" },
+                  )}
+                </small>
+              </button>
+              <div className="history-tools">
+                <button
+                  type="button"
+                  disabled={loading}
+                  title="Rename conversation"
+                  aria-label={`Rename ${item.title}`}
+                  onClick={() => {
+                    setRenameId(item.id);
+                    setRenameTitle(item.title);
+                  }}
+                >
+                  <Pencil className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  disabled={loading}
+                  title="Delete conversation"
+                  aria-label={`Delete ${item.title}`}
+                  onClick={() => setDeleteId(item.id)}
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        {sessions.length === 0 && (
+          <p className="history-empty">No conversations yet.</p>
+        )}
+      </div>
+      <div className="history-footer">
+        <span className={cn("status-dot", !indexReady && "empty")} />
+        {indexReady ? "Library ready" : "No sources added"}
+      </div>
+    </>
+  );
 
   return (
-    <div className="mx-auto w-full max-w-[1180px] px-4 pb-36 pt-7 sm:px-6 lg:px-8">
-      <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="eyebrow">Grounded workspace</p>
-          <h1 className="mt-2 max-w-3xl text-3xl font-semibold tracking-[-0.035em] text-ink sm:text-4xl">
-            Ask your material. Inspect every claim.
-          </h1>
+    <div className="study-chat">
+      <aside className="conversation-sidebar">{history}</aside>
+      <section className="conversation-main" aria-label="Study conversation">
+        <div className="conversation-toolbar">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="lg:hidden"
+            onClick={() => setHistoryOpen(true)}
+            aria-label="Open conversations"
+          >
+            <History />
+          </Button>
+          <h1>{conversation?.title || "New conversation"}</h1>
+          <div className="ml-auto flex shrink-0 gap-1">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={exportChat}
+              disabled={!conversation?.messages.length}
+              title="Export conversation"
+              aria-label="Export conversation"
+            >
+              <Download />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setSettingsOpen(true)}
+              title="Conversation settings"
+              aria-label="Conversation settings"
+            >
+              <Settings2 />
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-sm text-ink-muted">
-          <ShieldCheck className="size-4 text-cyan-deep" />
-          Answers constrained to retrieved evidence
+        <div className="conversation-scroll">
+          {connectionError ? (
+            <div className="chat-empty">
+              <MessageSquare className="size-8 text-ink-faint" />
+              <h2>Unable to load conversations</h2>
+              <p>{connectionError}</p>
+              <Button variant="outline" onClick={() => void load()}>
+                Reconnect
+              </Button>
+            </div>
+          ) : initializing ? (
+            <div className="chat-empty" role="status">
+              <LoaderCircle className="size-6 animate-spin text-ink-muted" />
+              <p>Loading conversation...</p>
+            </div>
+          ) : !conversation?.messages.length && !loading ? (
+            <div className="chat-empty">
+              <img src="/favicon.svg" alt="" width="44" height="44" />
+              <h2>What are you studying?</h2>
+              <p>
+                {indexReady
+                  ? "Your sources are ready."
+                  : "Start a conversation or add material to your library."}
+              </p>
+              <div className="empty-suggestions">
+                {[
+                  "Explain a concept",
+                  "Compare two ideas",
+                  "Work through a problem",
+                ].map((text) => (
+                  <button
+                    type="button"
+                    key={text}
+                    onClick={() => {
+                      setQuery(text + ": ");
+                      textareaRef.current?.focus();
+                    }}
+                  >
+                    {text}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {!initializing && (
+            <div className="conversation-transcript">
+              {conversation?.messages.map((message) =>
+                message.role === "assistant" ? (
+                  <AnswerMessage key={message.id} message={message} />
+                ) : (
+                  <div className="user-message" key={message.id}>
+                    <span>You</span>
+                    <p>{message.content}</p>
+                  </div>
+                ),
+              )}
+              {loading && (
+                <>
+                  <div className="user-message">
+                    <span>You</span>
+                    <p>{pendingQuestion}</p>
+                  </div>
+                  <div className="generation-status" role="status">
+                    <LoaderCircle className="size-4 animate-spin" />
+                    <span>Preparing your answer...</span>
+                  </div>
+                </>
+              )}
+              <div ref={endRef} />
+            </div>
+          )}
         </div>
-      </div>
-
-      <Card className="fixed bottom-3 left-3 right-3 z-30 mx-auto max-w-3xl overflow-hidden rounded-2xl border-line bg-card/95 py-0 shadow-[0_16px_45px_rgba(0,0,0,0.28)] backdrop-blur-xl sm:bottom-5 sm:left-6 sm:right-6">
-        <CardContent className="p-0">
-          <form onSubmit={submit} className="p-2.5 sm:p-3">
-            {image && preview && (
-              <div className="mb-4 flex items-center gap-3 rounded-2xl border border-cyan/20 bg-cyan-soft/55 p-3">
-                {/* Local object URLs are intentionally rendered without image optimization. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={preview} alt="Attached screenshot preview" className="size-11 rounded-lg border border-white object-cover shadow-sm" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink">{image.name}</p>
-                  <p className="mt-1 text-xs text-ink-muted">Screenshot mode · visual analysis{useKnowledgeBase ? " + your library" : ""}</p>
-                </div>
-                <Button type="button" variant="ghost" size="icon-sm" onClick={() => setImage(null)} aria-label="Remove screenshot" className="rounded-full">
-                  <X />
-                </Button>
+        <div className="composer-region">
+          {failure && (
+            <div className="request-error" role="alert">
+              <p>{failure}</p>
+              <button
+                type="button"
+                onClick={() => setFailure("")}
+                aria-label="Dismiss error"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          )}
+          <form
+            onSubmit={submit}
+            className="chat-composer"
+            onPaste={(event) => {
+              const file = Array.from(event.clipboardData.files).find((item) =>
+                item.type.startsWith("image/"),
+              );
+              if (file) {
+                event.preventDefault();
+                attach(file);
+              }
+            }}
+          >
+            {image && (
+              <div className="composer-attachment">
+                {preview && <img src={preview} alt="Attached screenshot" />}
+                <span>{image.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setImage(null)}
+                  disabled={loading}
+                  aria-label="Remove attachment"
+                >
+                  <X className="size-4" />
+                </button>
               </div>
             )}
-
-            <label htmlFor="question" className="sr-only">Ask a question about your study material</label>
             <textarea
-              id="question"
+              ref={textareaRef}
+              aria-label="Message"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={onKeyDown}
-              rows={1}
+              disabled={loading || initializing || Boolean(connectionError)}
               maxLength={4000}
-              placeholder={image ? "What should I explain in this image?" : "Ask a question across your notes, slides, diagrams, and lectures…"}
-              className="max-h-28 min-h-11 w-full resize-none bg-transparent px-2 py-2.5 text-[15px] leading-6 text-ink outline-none placeholder:text-ink-faint"
+              rows={2}
+              placeholder={
+                image ? "Ask about this image..." : "Ask a question..."
+              }
+              onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+                if (
+                  event.key === "Enter" &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing
+                ) {
+                  event.preventDefault();
+                  void submit();
+                }
+              }}
             />
-
-            <div className="mt-1 flex items-center gap-1.5">
+            <div className="composer-tools">
               <input
                 ref={fileRef}
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
-                className="hidden"
-                onChange={(event) => setImage(event.target.files?.[0] ?? null)}
+                hidden
+                onChange={(event) => {
+                  attach(event.target.files?.[0]);
+                  event.target.value = "";
+                }}
               />
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button type="button" variant="ghost" size="icon-sm" onClick={() => fileRef.current?.click()} className="rounded-lg text-ink-muted" aria-label="Attach screenshot">
-                      <Paperclip />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Attach or paste a screenshot</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              <button
+              <Button
                 type="button"
-                onClick={() => setSettingsOpen(true)}
-                className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-ink-muted transition hover:bg-muted hover:text-ink"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => fileRef.current?.click()}
+                disabled={loading}
+                title="Attach image"
+                aria-label="Attach image"
               >
-                <Settings2 className="size-4" />
-                {image ? "Vision settings" : answerScopes.find((item) => item.value === answerScope)?.label}
-                <ChevronDown className="size-3.5" />
-              </button>
-
-              {!image && comprehensive && <Badge className="rounded-full bg-cyan-soft text-cyan-deep hover:bg-cyan-soft">Comprehensive</Badge>}
-
-              <Button type="button" variant="ghost" size="icon-sm" onClick={() => setHistoryOpen(true)} className="rounded-lg text-ink-muted" aria-label="Open chat history">
-                <History />
+                <Paperclip />
               </Button>
-              <Button type="button" variant="ghost" size="icon-sm" onClick={startNewChat} className="rounded-lg text-ink-muted" aria-label="Start new chat">
-                <MessageSquare />
-              </Button>
-
+              <select
+                aria-label="Knowledge scope"
+                value={scope}
+                disabled={loading || Boolean(image)}
+                onChange={(event) =>
+                  setScope(event.target.value as AnswerScope)
+                }
+              >
+                {scopes.map((item) => (
+                  <option value={item.value} key={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+              {image && (
+                <span className="text-xs text-ink-muted">Image question</span>
+              )}
               <Button
                 type="submit"
-                disabled={loading || !query.trim()}
-                size="icon"
-                className="ml-auto rounded-xl action-surface shadow-[0_8px_20px_rgba(8,31,43,0.18)]"
-                aria-label="Ask question"
+                size="icon-sm"
+                className="ml-auto"
+                disabled={
+                  loading ||
+                  initializing ||
+                  Boolean(connectionError) ||
+                  !query.trim()
+                }
+                aria-label="Send message"
+                title="Send message"
               >
-                {loading ? <LoaderCircle className="animate-spin" /> : <ArrowUp />}
+                {loading ? (
+                  <LoaderCircle className="animate-spin" />
+                ) : (
+                  <ArrowUp />
+                )}
               </Button>
             </div>
           </form>
-        </CardContent>
-      </Card>
-
-      {!result && !loading && (
-        <div className="mt-5 flex flex-wrap gap-2">
-          {promptIdeas.map((prompt) => (
-            <button
-              key={prompt}
-              type="button"
-              onClick={() => setQuery(prompt)}
-              className="rounded-full border border-line bg-card px-4 py-2 text-sm text-ink-muted transition hover:border-cyan/30 hover:text-ink"
-            >
-              {prompt}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {chatMessages.length > (result ? 2 : 0) && (
-        <section className="mx-auto mt-8 max-w-3xl space-y-5" aria-label="Previous conversation">
-          <div className="flex items-center justify-between">
-            <p className="eyebrow">Conversation history</p>
-            <span className="text-xs text-ink-faint">Saved in this browser</span>
-          </div>
-          {chatMessages.slice(0, result ? -2 : undefined).map((message) => (
-            <div key={message.id} className={cn("rounded-2xl px-4 py-3 text-sm leading-6", message.role === "user" ? "ml-auto max-w-[78%] bg-cyan-soft text-ink" : "max-w-[92%] border border-line bg-card text-ink-muted")}>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-faint">{message.role === "user" ? "You" : "Verity"}</p>
-              {message.role === "assistant" ? (
-                <>
-                  <RichText evidence={message.evidence}>{message.content}</RichText>
-                  {message.evidence?.length ? (
-                    <details className="mt-3 border-t border-line pt-3">
-                      <summary className="cursor-pointer text-xs font-semibold text-cyan-deep">View {message.evidence.length} sources</summary>
-                      <div className="mt-3"><EvidencePanel items={message.evidence} title="Sources for this answer" compact /></div>
-                    </details>
-                  ) : null}
-                </>
-              ) : <p className="whitespace-pre-wrap">{message.content}</p>}
-            </div>
-          ))}
-        </section>
-      )}
-
-      {loading && (
-        <div className="mt-8 overflow-hidden rounded-[24px] border border-line bg-card p-6 sm:p-8">
-          <div className="flex items-center gap-3">
-            <span className="relative flex size-10 items-center justify-center rounded-xl bg-cyan-soft text-cyan-deep">
-              <ScanSearch className="size-5" />
-              <span className="absolute -right-0.5 -top-0.5 size-2.5 animate-pulse rounded-full bg-cyan" />
+          <div className="composer-caption">
+            <span>
+              {loading
+                ? "Generating"
+                : conversation
+                  ? "Conversation saved"
+                  : "New conversation"}
             </span>
-            <div>
-              <p className="font-semibold text-ink">Tracing the strongest evidence</p>
-              <p className="text-sm text-ink-muted">Retrieving, reranking, and validating citations…</p>
-            </div>
-          </div>
-          <div className="mt-7 space-y-3">
-            <div className="h-3 w-[92%] animate-pulse rounded-full bg-muted" />
-            <div className="h-3 w-full animate-pulse rounded-full bg-muted" />
-            <div className="h-3 w-[76%] animate-pulse rounded-full bg-muted" />
+            <span>
+              {query.length > 3500 ? `${query.length}/4000` : "Verity Study"}
+            </span>
           </div>
         </div>
-      )}
-
-      {result && (
-        <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_260px]">
-          <div className="min-w-0 space-y-6">
-            <div className="ml-auto max-w-[86%] rounded-2xl bg-cyan-soft px-4 py-3 text-sm leading-6 text-ink">
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-faint">You</p>
-              <p className="whitespace-pre-wrap">{activeQuestion}</p>
-            </div>
-            <article className="rounded-[24px] border border-line bg-card p-6 shadow-[0_18px_45px_rgba(0,0,0,0.12)] sm:p-8">
-              <div className="mb-6 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <span className="flex size-10 items-center justify-center rounded-xl action-surface"><Bot className="size-5" /></span>
-                  <div>
-                    <p className="font-semibold text-ink">Grounded answer</p>
-                    <p className="text-xs text-ink-muted">Generated from {evidence.length} retrieved chunks{isAskResult(result) && result.comprehensive ? ` across ${result.sources_used.length} source${result.sources_used.length === 1 ? "" : "s"}` : ""}</p>
-                  </div>
-                </div>
-                {grounding?.length ? (
-                  <Button type="button" variant="outline" size="sm" onClick={() => setShowGrounding((value) => !value)} className="rounded-xl border-line">
-                    <Sparkles /> {showGrounding ? "Plain answer" : "Token map"}
-                  </Button>
-                ) : null}
-              </div>
-
-              {showGrounding && grounding ? (
-                <div className="flex flex-wrap gap-x-1 gap-y-2 leading-8" aria-label="Token grounding map">
-                  {grounding.map((token, index) => (
-                    <span
-                      key={`${token.token}-${index}`}
-                      title={`${token.match_type}: ${(token.score * 100).toFixed(0)}%`}
-                      className={cn(
-                        "rounded px-0.5 text-[16px]",
-                        token.score >= 0.8 && "bg-emerald-100 text-emerald-950 dark:bg-emerald-950/50 dark:text-emerald-100",
-                        token.score >= 0.45 && token.score < 0.8 && "bg-amber-100 text-amber-950 dark:bg-amber-950/50 dark:text-amber-100",
-                        token.score < 0.45 && "bg-rose-100 text-rose-950 dark:bg-rose-950/50 dark:text-rose-100",
-                      )}
-                    >
-                      {token.token}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <RichText evidence={evidence}>{result.answer}</RichText>
-              )}
-
-              {isAskResult(result) && result.disagreements.length > 0 && (
-                <div className="mt-7 rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/70 dark:bg-amber-950/35">
-                  <div className="flex items-center gap-2 font-semibold text-amber-950 dark:text-amber-100">
-                    <Gauge className="size-4" /> Source disagreement detected
-                  </div>
-                  {result.disagreements.map((item) => (
-                    <p key={`${item.chunk_id_a}-${item.chunk_id_b}`} className="mt-2 text-sm leading-6 text-amber-900 dark:text-amber-200">
-                      {item.explanation || `${item.source_a} and ${item.source_b} make conflicting claims.`}
-                    </p>
-                  ))}
-                </div>
-              )}
-
-              {!isAskResult(result) && (
-                <details className="mt-7 rounded-2xl border border-line bg-canvas px-4 py-3 text-sm">
-                  <summary className="cursor-pointer font-semibold text-ink">What the vision model found</summary>
-                  <p className="mt-3 whitespace-pre-wrap leading-6 text-ink-muted">{result.image_analysis}</p>
-                </details>
-              )}
-
-              {isAskResult(result) && result.comprehensive && (
-                <div className="mt-7 rounded-2xl border border-cyan/20 bg-cyan-soft/45 p-4 text-sm">
-                  <p className="font-semibold text-ink">Comprehensive source coverage</p>
-                  <p className="mt-1 leading-6 text-ink-muted">Used {result.sources_used.length} of {result.sources_considered.length} library sources with relevant retrieved evidence.</p>
-                  <p className="mt-2 text-xs text-ink-muted">{result.sources_used.join(" · ") || "No source-specific evidence was found."}</p>
-                </div>
-              )}
-
-              {isAskResult(result) && result.provenance_notice && (
-                <div className={cn("mt-7 rounded-2xl border p-4 text-sm", result.answer_basis === "sources" ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200" : result.answer_basis === "mixed" ? "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200" : "border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200")}>
-                  <p className="font-semibold">{result.answer_basis === "sources" ? "From your sources" : result.answer_basis === "mixed" ? "Sources + general knowledge" : "General model knowledge"}</p>
-                  <p className="mt-1 leading-6 opacity-80">{result.provenance_notice}</p>
-                </div>
-              )}
-            </article>
-
-            <EvidencePanel items={evidence} />
-          </div>
-
-          <aside className="space-y-3 xl:sticky xl:top-24 xl:self-start">
-            <div className="rounded-2xl border border-line bg-card p-4">
-              <p className="eyebrow">Answer integrity</p>
-              <div className="mt-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-ink-muted">Grounded tokens</span>
-                  <strong className="font-mono text-sm text-ink">{result.grounding_ratio == null ? "N/A" : `${Math.round(result.grounding_ratio * 100)}%`}</strong>
-                </div>
-                {result.grounding_ratio != null && <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-cyan transition-all" style={{ width: `${Math.round(result.grounding_ratio * 100)}%` }} /></div>}
-                <div className="flex items-center justify-between border-t border-line pt-4">
-                  <span className="text-sm text-ink-muted">Citation validity</span>
-                  <span className="flex items-center gap-1.5 font-mono text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-                    <CheckCircle2 className="size-4" /> {result.citation_validity_rate == null ? "N/A" : `${Math.round(result.citation_validity_rate * 100)}%`}
-                  </span>
-                </div>
-                {isAskResult(result) && result.latency_ms != null && (
-                  <div className="flex items-center justify-between border-t border-line pt-4">
-                    <span className="text-sm text-ink-muted">Pipeline time</span>
-                    <strong className="font-mono text-sm text-ink">{(result.latency_ms / 1000).toFixed(1)}s</strong>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="rounded-2xl action-surface p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="size-4 text-cyan-light" /> How to read this</div>
-              <p className="mt-2 text-sm leading-6 text-white/65">Open any source card to inspect the exact chunk that supported the answer.</p>
-            </div>
-          </aside>
-        </div>
-      )}
-
-      <div ref={conversationEndRef} className="h-1" />
-
+      </section>
       <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
-        <SheetContent side="left" className="w-[90%] gap-0 border-line bg-canvas p-0 sm:max-w-sm">
-          <SheetHeader className="border-b border-line bg-card px-5 py-5 text-left">
-            <SheetTitle className="flex items-center gap-2 text-lg text-ink"><History className="size-5 text-cyan-deep" /> Chat history</SheetTitle>
-            <SheetDescription>Open an earlier study conversation or begin a new one.</SheetDescription>
+        <SheetContent side="left" className="bg-card p-4">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Conversations</SheetTitle>
+            <SheetDescription>Saved conversations</SheetDescription>
           </SheetHeader>
-          <div className="p-3">
-            <Button type="button" onClick={startNewChat} className="mb-3 w-full rounded-xl action-surface">
-              <MessageSquare /> New study chat
-            </Button>
-            <div className="space-y-1.5">
-              {chatState.sessions.map((session) => (
-                <button
-                  key={session.id}
-                  type="button"
-                  onClick={() => openChat(session.id)}
-                  className={cn("w-full rounded-xl border px-3 py-3 text-left transition", session.id === chatState.activeId ? "border-cyan/30 bg-cyan-soft/70" : "border-transparent hover:border-line hover:bg-card")}
-                >
-                  <p className="truncate text-sm font-semibold text-ink">{session.title}</p>
-                  <div className="mt-1 flex items-center justify-between gap-3 text-[11px] text-ink-faint">
-                    <span>{Math.ceil(session.messages.length / 2)} turn{session.messages.length === 2 ? "" : "s"}</span>
-                    <span>{new Date(session.updatedAt).toLocaleDateString()}</span>
-                  </div>
-                </button>
-              ))}
+          {history}
+        </SheetContent>
+      </Sheet>
+      <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <SheetContent className="bg-card">
+          <SheetHeader>
+            <SheetTitle>Conversation settings</SheetTitle>
+            <SheetDescription>Sources and answer preferences</SheetDescription>
+          </SheetHeader>
+          <div className="conversation-settings">
+            <label>
+              Retrieval
+              <select
+                value={mode}
+                disabled={loading}
+                onChange={(event) =>
+                  setMode(event.target.value as RetrievalMode)
+                }
+              >
+                <option value="full">Full pipeline</option>
+                <option value="hybrid">Hybrid</option>
+                <option value="dense_only">Semantic</option>
+                <option value="bm25_only">Keyword</option>
+              </select>
+            </label>
+            <label>
+              Evidence passages
+              <input
+                type="number"
+                min={1}
+                max={image ? 10 : 20}
+                value={topK}
+                disabled={loading}
+                onChange={(event) =>
+                  setTopK(
+                    Math.max(
+                      1,
+                      Math.min(
+                        image ? 10 : 20,
+                        Number(event.target.value) || 1,
+                      ),
+                    ),
+                  )
+                }
+              />
+            </label>
+            <div>
+              <span>Source diversity</span>
+              <Switch
+                checked={comprehensive}
+                disabled={loading}
+                onCheckedChange={setComprehensive}
+              />
+            </div>
+            <div>
+              <span>Detect source conflicts</span>
+              <Switch
+                checked={contradictions}
+                disabled={loading}
+                onCheckedChange={setContradictions}
+              />
+            </div>
+            <div>
+              <span>Use library for images</span>
+              <Switch
+                checked={useKnowledgeBase}
+                disabled={loading}
+                onCheckedChange={setUseKnowledgeBase}
+              />
+            </div>
+            <div>
+              <span>Save images to library</span>
+              <Switch
+                checked={saveImage}
+                disabled={loading}
+                onCheckedChange={setSaveImage}
+              />
             </div>
           </div>
         </SheetContent>
       </Sheet>
-
-      <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <SheetTrigger asChild><span className="hidden" /></SheetTrigger>
-        <SheetContent className="border-line bg-card sm:max-w-md">
-          <SheetHeader className="px-0 text-left">
-            <SheetTitle className="text-xl text-ink">Retrieval settings</SheetTitle>
-            <SheetDescription>Control how evidence is selected for this question.</SheetDescription>
+      <Sheet
+        open={Boolean(renameId)}
+        onOpenChange={(open) => {
+          if (!open) setRenameId(null);
+        }}
+      >
+        <SheetContent className="bg-card">
+          <SheetHeader>
+            <SheetTitle>Rename conversation</SheetTitle>
+            <SheetDescription>Conversation title</SheetDescription>
           </SheetHeader>
-          <div className="space-y-7 px-4 pb-6">
-            {!image && (
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-ink">Knowledge mode</label>
-                {answerScopes.map((item) => (
-                  <button key={item.value} type="button" onClick={() => setAnswerScope(item.value)} className={cn("flex w-full items-start gap-3 rounded-xl border p-3 text-left transition", answerScope === item.value ? "border-cyan bg-cyan-soft/60" : "border-line hover:bg-canvas")}>
-                    <span className={cn("mt-1 size-3 rounded-full border-2", answerScope === item.value ? "border-cyan bg-cyan" : "border-muted-foreground/40")} />
-                    <span><strong className="block text-sm text-ink">{item.label}</strong><span className="mt-0.5 block text-xs text-ink-muted">{item.detail}</span></span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {!image ? (
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-ink">Advanced retrieval pipeline</label>
-                {modes.map((item) => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    onClick={() => setMode(item.value)}
-                    className={cn("flex w-full items-start gap-3 rounded-xl border p-3 text-left transition", mode === item.value ? "border-cyan bg-cyan-soft/60" : "border-line hover:bg-canvas")}
-                  >
-                    <span className={cn("mt-1 size-3 rounded-full border-2", mode === item.value ? "border-cyan bg-cyan" : "border-slate-300")} />
-                    <span><strong className="block text-sm text-ink">{item.label}</strong><span className="mt-0.5 block text-xs text-ink-muted">{item.detail}</span></span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-line p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div><p className="text-sm font-semibold text-ink">Use knowledge base</p><p className="mt-1 text-xs text-ink-muted">Blend the screenshot with relevant uploaded material.</p></div>
-                  <Switch checked={useKnowledgeBase} onCheckedChange={setUseKnowledgeBase} />
-                </div>
-                <div className="mt-5 flex items-center justify-between gap-4 border-t border-line pt-5">
-                  <div><p className="text-sm font-semibold text-ink">Save to library</p><p className="mt-1 text-xs text-ink-muted">Make this visual searchable in future questions.</p></div>
-                  <Switch checked={saveScreenshot} onCheckedChange={setSaveScreenshot} />
-                </div>
-              </div>
-            )}
-
-            <div>
-              <div className="mb-4 flex items-center justify-between">
-                <label className="text-sm font-semibold text-ink">Evidence depth</label>
-                <Badge variant="outline" className="font-mono">{topK} chunks</Badge>
-              </div>
-              <Slider value={[topK]} min={1} max={image ? 10 : 20} step={1} onValueChange={(value) => setTopK(value[0])} className="[&_[data-slot=slider-range]]:bg-cyan [&_[data-slot=slider-thumb]]:border-cyan" />
-            </div>
-
-            {!image && (
-              <div className="flex items-center justify-between gap-4 rounded-2xl border border-cyan/20 bg-cyan-soft/35 p-4">
-                <div><p className="text-sm font-semibold text-ink">Comprehensive explanation</p><p className="mt-1 text-xs text-ink-muted">Diversify evidence across sources before writing a full answer. Slower, but better for broad questions.</p></div>
-                <Switch checked={comprehensive} onCheckedChange={setComprehensive} />
-              </div>
-            )}
-
-            {!image && (
-              <div className="flex items-center justify-between gap-4 rounded-2xl border border-line p-4">
-                <div><p className="text-sm font-semibold text-ink">Detect contradictions</p><p className="mt-1 text-xs text-ink-muted">Verify likely conflicts across different sources.</p></div>
-                <Switch checked={detectContradictions} onCheckedChange={setDetectContradictions} />
-              </div>
-            )}
-
-            <div className="rounded-2xl bg-canvas p-4 text-xs leading-5 text-ink-muted">
-              <div className="mb-2 flex items-center gap-2 font-semibold text-ink"><ClipboardPaste className="size-4" /> Screenshot tip</div>
-              Paste an image anywhere in this workspace to ask about a diagram, equation, or slide.
-            </div>
+          <form onSubmit={rename} className="conversation-settings">
+            <input
+              aria-label="Conversation title"
+              value={renameTitle}
+              onChange={(event) => setRenameTitle(event.target.value)}
+              maxLength={120}
+              autoFocus
+            />
+            <Button type="submit" disabled={!renameTitle.trim()}>
+              Save
+            </Button>
+          </form>
+        </SheetContent>
+      </Sheet>
+      <Sheet
+        open={Boolean(deleteId)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteId(null);
+        }}
+      >
+        <SheetContent className="bg-card">
+          <SheetHeader>
+            <SheetTitle>Delete conversation?</SheetTitle>
+            <SheetDescription>
+              This removes the conversation and its saved answers.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex gap-2 p-4">
+            <Button variant="outline" onClick={() => setDeleteId(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => void remove()}>
+              Delete conversation
+            </Button>
           </div>
         </SheetContent>
       </Sheet>

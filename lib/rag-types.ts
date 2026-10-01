@@ -3,7 +3,8 @@ export type ChunkType = "text" | "table" | "visual" | "audio";
 export type RetrievalMode = "bm25_only" | "dense_only" | "hybrid" | "full";
 export type AnswerScope = "auto" | "sources_only" | "model_only";
 export type AnswerBasis = "sources" | "mixed" | "model";
-export type EvidenceSufficiency = "strong" | "partial" | "insufficient" | "not_checked";
+export type EvidenceSufficiency =
+  "strong" | "partial" | "insufficient" | "not_checked";
 
 export interface Chunk {
   chunk_id: string;
@@ -71,6 +72,24 @@ export interface AskResponse {
 export interface ConversationTurn {
   role: "user" | "assistant";
   content: string;
+}
+
+export interface StoredMessage extends ConversationTurn {
+  id: string;
+  created_at: number;
+  result: AskResponse | ScreenshotAskResponse | null;
+}
+
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  created_at: number;
+  updated_at: number;
+  revision: number;
+}
+
+export interface ConversationDetail extends ConversationSummary {
+  messages: StoredMessage[];
 }
 
 export interface ScreenshotAskResponse {
@@ -146,7 +165,12 @@ export interface QuizResponse {
 
 export interface RuntimeConfig {
   llm: { provider: string; model: string; api_key_set: boolean };
-  hyde: { enabled: boolean; provider: string; model: string; api_key_set: boolean };
+  hyde: {
+    enabled: boolean;
+    provider: string;
+    model: string;
+    api_key_set: boolean;
+  };
   vlm: { provider: string; model: string; api_key_set: boolean };
   asr: { provider: string; model: string; api_key_set: boolean };
   embedding_model: string;
