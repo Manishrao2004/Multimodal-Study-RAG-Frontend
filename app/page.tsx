@@ -2,6 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element -- The brand mark is a local SVG. */
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import {
   BookOpen,
   ChevronRight,
@@ -57,6 +58,8 @@ export default function Home() {
   const [revision, setRevision] = useState(0);
   const [newChatRequest, setNewChatRequest] = useState(0);
   const [chatBusy, setChatBusy] = useState(false);
+  const [studentLocation, setStudentLocation] = useState("India");
+  const [timezone, setTimezone] = useState("");
 
   const refreshSystem = async () => {
     try {
@@ -102,6 +105,9 @@ export default function Home() {
     setNewChatRequest((value) => value + 1);
   };
   const openConfig = async () => {
+    setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    try { setStudentLocation(localStorage.getItem("verity-student-location") ?? "India"); }
+    catch { /* Location remains optional when storage is unavailable. */ }
     setConfigOpen(true);
     setConfigLoading(true);
     try {
@@ -285,6 +291,26 @@ export default function Home() {
             </SheetDescription>
           </SheetHeader>
           <div className="settings-body">
+            <section className="settings-group">
+              <h3>Answer context</h3>
+              <ConfigRow label="Timezone" value={timezone || "Detecting"} />
+              <label htmlFor="student-location">Country or region</label>
+              <input
+                id="student-location"
+                className="context-location-input"
+                value={studentLocation}
+                maxLength={200}
+                placeholder="For example, India"
+                onChange={(event) => setStudentLocation(event.target.value)}
+              />
+              <p className="state-text">Defaults to India and INR (₹) for examples. Change the region for a different country, or specify it in your question. Your timezone is detected automatically; no precise location is collected.</p>
+              <Button variant="outline" onClick={() => {
+                try {
+                  localStorage.setItem("verity-student-location", studentLocation.trim());
+                  toast.success("Answer context saved");
+                } catch { toast.error("Could not save location in this browser."); }
+              }}>Save answer context</Button>
+            </section>
             <section className="settings-group">
               <h3>Connection</h3>
               <ConfigRow
