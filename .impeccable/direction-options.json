@@ -1,0 +1,37 @@
+{
+  "title": "Verity Study redesign",
+  "question": "A dark-only, conversation-first workspace. Confirm this direction or steer it before implementation.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "Focused study workspace",
+      "thesis": "One navigation column, one readable conversation, and evidence only when requested.",
+      "lineage": "Research desks and document-navigation interfaces, translated into a precise dark workspace.",
+      "palette": ["#111214", "#191a1e", "#27292f", "#f1f2f4", "#8fb8ee"],
+      "materials": ["opaque graphite surfaces", "crisp system typography", "quiet separators"],
+      "viewport": "A 256px sidebar combines navigation and compact history; a single main toolbar leads into a wide reading column and a bottom composer. Fresh launch shows a clean new conversation.",
+      "risk": "Restraint needs exceptionally precise spacing and contrast to avoid looking merely plain.",
+      "raised": [
+        {"from":"Japanese high-density web", "raise":"History and library rows become compact, consistently aligned, and scannable."},
+        {"from":"Dance notation", "raise":"Answer and evidence retain a clear relationship rather than becoming unrelated panels."},
+        {"from":"Airport wayfinding", "raise":"Every view has one clear task heading and one primary action."},
+        {"from":"Character catalog", "raise":"Repeated rows receive identical dimensions and state treatment."},
+        {"from":"Botanical folio", "raise":"Comparisons use consistent typography and aligned source labels."},
+        {"from":"Data field", "raise":"Diagnostics are rigorously secondary to readable study content."}
+      ],
+      "wireframe": {"cols":12,"rows":10,"regions":[{"label":"Navigation + history","x":0,"y":0,"w":2,"h":10},{"label":"Conversation title + actions","x":2,"y":0,"w":10,"h":1},{"label":"Reading surface / clean opening","x":3,"y":2,"w":8,"h":5},{"label":"Composer","x":3,"y":8,"w":8,"h":2,"accent":true}]},
+      "comp": ".impeccable/mocks/decision/assigned.webp"
+    },
+    {"id":"japanese-high-density-web","label":"Dense module grid","verdict":"declined","thesis":"Pack conversations and evidence into a dense module index.","palette":["#111214","#eceef2","#e27a80"],"materials":["boxed modules","compact labels"],"viewport":"A tiled index surrounds the conversation.","risk":"Too much information competes with reading.","case":"Lower student identification and lower explanation clarity than the focused workspace.","kept":"Compact, aligned rows."},
+    {"id":"notation-diagram-systems-labanotation","label":"Mirrored evidence score","verdict":"declined","thesis":"Mirror answer segments and evidence along a central reading spine.","palette":["#111214","#eceef2","#787b84"],"materials":["aligned columns","segment rules"],"viewport":"Answer and evidence remain simultaneously visible.","risk":"An unfamiliar reading order adds cognitive load.","case":"Lower familiarity and lower task clarity for ordinary study questions.","kept":"Clear answer-to-evidence relationship."},
+    {"id":"wayfinding-cartography-signage-terminal-yellow-wayfinding","label":"Task wayfinding","verdict":"declined","thesis":"Guide each study task through large directional bands.","palette":["#111214","#e3c55a","#f1f2f4"],"materials":["sign bands","large task labels"],"viewport":"A prominent next-task banner leads the screen.","risk":"Wayfinding overwhelms the material being studied.","case":"Lower audience identification and lower content clarity for long reading sessions.","kept":"One clear primary task per view."},
+    {"id":"pop-culture-shelf-character-goods-catalog","label":"Study roster","verdict":"declined","thesis":"Organize study sessions as a finite visual roster.","palette":["#111214","#9cb8da","#e8eaf0"],"materials":["fixed cells","session labels"],"viewport":"A session grid precedes the conversation.","risk":"A catalog-like opening delays asking a question.","case":"Lower identification and clarity than the requested conversation-first surface.","kept":"Consistent repeated-item geometry."},
+    {"id":"editorial-sequence-montage-botanical-folio-season","label":"Source folio","verdict":"declined","thesis":"Present sources as a sequential set of registered study plates.","palette":["#111214","#d5d8df","#86b49b"],"materials":["aligned source stages","caption hierarchy"],"viewport":"Source comparisons lead before the conversation.","risk":"Prioritizes source browsing over the explicitly requested chat workflow.","case":"Lower student identification and lower product clarity for conversation-first use.","kept":"Consistent comparison labels and alignment."},
+    {"id":"ikeda-datamatics","label":"Data field","verdict":"declined","thesis":"Expose the retrieval system as a high-density data field.","palette":["#000000","#ffffff"],"materials":["tabular diagnostics","black and white"],"viewport":"Retrieval data surrounds the answer.","risk":"Diagnostics compete with understanding and movement distracts.","case":"Lower audience identification and lower study clarity.","kept":"A strict hierarchy that contains diagnostics."}
+  ],
+  "reroll":{"registers":["safer","bolder"]},
+  "buildPath":{"value":"code","toggle":true},
+  "steer":true,
+  "canon":true,
+  "canonCard":{"label":"Conventional chat layout","thesis":"A familiar dark chat layout with no distinctive structural changes.","palette":["#111214","#24262c","#f1f2f4"],"materials":["standard sidebar","chat bubbles"],"viewport":"The expected sidebar-and-chat arrangement with consistent controls.","risk":"Familiar but visually indistinguishable from other chat products.","comp":".impeccable/mocks/decision/canon.webp"}
+}

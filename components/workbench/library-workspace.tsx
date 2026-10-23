@@ -2,8 +2,7 @@
 
 import { DragEvent, useEffect, useRef, useState } from "react";
 import {
-  AudioLines,
-  BookOpen,
+  Check,
   FileAudio,
   FileChartColumn,
   FileText,
@@ -15,10 +14,9 @@ import {
   Search,
   Table2,
   Trash2,
-  UploadCloud,
+  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
-
 import { api } from "@/lib/api";
 import type {
   DocumentSummary,
@@ -35,9 +33,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -48,138 +44,154 @@ import {
 
 const ACCEPTED =
   ".pdf,.docx,.pptx,.html,.htm,.md,.txt,.mp3,.wav,.m4a,.flac,.ogg,.webm,.mp4,.mpga";
-
 function documentIcon(document: DocumentSummary) {
   if (document.audio_chunks) return FileAudio;
   if (document.visual_chunks > document.text_chunks) return ImageIcon;
   if (document.table_chunks > document.text_chunks) return FileChartColumn;
   return FileText;
 }
-
 function extension(name: string) {
   return name.split(".").pop()?.toUpperCase() || "FILE";
-}
-
-interface LibraryWorkspaceProps {
-  revision: number;
-  onLibraryChanged: () => void;
 }
 
 export function LibraryWorkspace({
   revision,
   onLibraryChanged,
-}: LibraryWorkspaceProps) {
+}: {
+  revision: number;
+  onLibraryChanged: () => void;
+}) {
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [stats, setStats] = useState<KnowledgeBaseStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [dragging, setDragging] = useState(false);
-  const [uploading, setUploading] = useState<{ name: string } | null>(null);
-  const uploadBusyRef = useRef(false);
+  const [uploading, setUploading] = useState<string | null>(null);
   const [lastUpload, setLastUpload] = useState<IngestResponse | null>(null);
   const [filter, setFilter] = useState("");
+  const [removing, setRemoving] = useState(false);
+  const [deleteDocument, setDeleteDocument] = useState<DocumentSummary | null>(
+    null,
+  );
   const inputRef = useRef<HTMLInputElement>(null);
+  const uploadBusyRef = useRef(false);
 
   const load = async () => {
     setLoading(true);
+    setError("");
     try {
-      const [documentData, statsData] = await Promise.all([
+      const [nextDocuments, nextStats] = await Promise.all([
         api.documents(),
         api.stats(),
       ]);
-      setDocuments(documentData);
-      setStats(statsData);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not load the library.",
+      setDocuments(nextDocuments);
+      setStats(nextStats);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not load the library. Try refreshing.",
       );
     } finally {
       setLoading(false);
     }
   };
-
   useEffect(() => {
+    let active = true;
     void Promise.all([api.documents(), api.stats()])
-      .then(([documentData, statsData]) => {
-        setDocuments(documentData);
-        setStats(statsData);
+      .then(([nextDocuments, nextStats]) => {
+        if (active) {
+          setDocuments(nextDocuments);
+          setStats(nextStats);
+          setError("");
+        }
       })
-      .catch((error: unknown) => {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Could not load the library.",
-        );
+      .catch((cause: unknown) => {
+        if (active)
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Could not load the library. Try refreshing.",
+          );
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [revision]);
-
   const uploadFiles = async (files: File[]) => {
     if (!files.length || uploadBusyRef.current) return;
     uploadBusyRef.current = true;
-    for (const file of files) {
-      setUploading({ name: file.name });
-      try {
-        const response = await api.ingest(file);
-        setLastUpload(response);
-        if (response.warnings.length) toast.warning(response.warnings[0]);
-        toast.success(`${response.source_file} is ready to search`);
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : `Could not process ${file.name}.`,
-        );
+    try {
+      for (const file of files) {
+        setUploading(file.name);
+        try {
+          const response = await api.ingest(file);
+          setLastUpload(response);
+          if (response.warnings.length) toast.warning(response.warnings[0]);
+          toast.success(`${response.source_file} is ready`);
+        } catch (cause) {
+          toast.error(
+            cause instanceof Error
+              ? cause.message
+              : `Could not process ${file.name}.`,
+          );
+        }
       }
+    } finally {
+      setUploading(null);
+      uploadBusyRef.current = false;
     }
-    setUploading(null);
-    uploadBusyRef.current = false;
     await load();
     onLibraryChanged();
   };
-
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setDragging(false);
     void uploadFiles(Array.from(event.dataTransfer.files));
   };
-
-  const remove = async (name: string) => {
+  const remove = async () => {
+    if (!deleteDocument || removing) return;
+    setRemoving(true);
     try {
-      const response = await api.deleteDocument(name);
-      toast.success(`Removed ${response.chunks_removed} indexed chunks`);
+      await api.deleteDocument(deleteDocument.source_file);
+      setDeleteDocument(null);
+      toast.success("Source removed");
       await load();
       onLibraryChanged();
-    } catch (error) {
+    } catch (cause) {
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "Could not remove the document.",
+        cause instanceof Error
+          ? cause.message
+          : "Could not remove the source. Try again.",
       );
+    } finally {
+      setRemoving(false);
     }
   };
-
-  const visibleDocuments = documents.filter((document) =>
+  const visible = documents.filter((document) =>
     document.source_file.toLowerCase().includes(filter.toLowerCase()),
   );
 
   return (
-    <div className="library-workspace mx-auto w-full max-w-[1180px] px-4 pb-16 pt-7 sm:px-6 lg:px-8">
-      <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+    <div className="workspace-page library-workspace">
+      <div className="page-heading">
         <div>
-          <h1 className="text-2xl font-semibold text-ink">Library</h1>
+          <h1>Library</h1>
+          <p>{stats ? `${stats.documents} sources` : "Your study material"}</p>
         </div>
         <Button
           onClick={() => inputRef.current?.click()}
           disabled={Boolean(uploading)}
-          className="w-fit rounded-md action-surface px-5"
         >
-          <Plus /> Add material
+          <Plus size={16} /> Add material
         </Button>
       </div>
-
       <input
         ref={inputRef}
-        className="hidden"
+        hidden
         type="file"
         multiple
         accept={ACCEPTED}
@@ -188,31 +200,23 @@ export function LibraryWorkspace({
           event.currentTarget.value = "";
         }}
       />
-
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <div className="stat-card md:col-span-1">
-          <span>Documents</span>
-          <strong>{stats?.documents ?? "—"}</strong>
-          <BookOpen className="absolute bottom-4 right-4 size-8 text-cyan-light/70" />
-        </div>
-        <div className="stat-card">
-          <span>Searchable chunks</span>
-          <strong>{stats?.chunks?.toLocaleString() ?? "—"}</strong>
-          <Search className="absolute bottom-4 right-4 size-7 text-ink-faint" />
-        </div>
-        <div className="stat-card">
-          <span>Visual evidence</span>
-          <strong>{stats?.by_type?.visual ?? 0}</strong>
-          <ImageIcon className="absolute bottom-4 right-4 size-7 text-ink-faint" />
-        </div>
-        <div className="stat-card">
-          <span>Audio segments</span>
-          <strong>{stats?.by_type?.audio ?? 0}</strong>
-          <AudioLines className="absolute bottom-4 right-4 size-7 text-ink-faint" />
-        </div>
+      <div className="library-summary" aria-label="Library statistics">
+        <span>
+          <strong>{stats?.chunks?.toLocaleString() ?? "--"}</strong> indexed
+          passages
+        </span>
+        <span>
+          <strong>{stats?.by_type?.visual ?? 0}</strong> figures
+        </span>
+        <span>
+          <strong>{stats?.by_type?.table ?? 0}</strong> tables
+        </span>
+        <span>
+          <strong>{stats?.by_type?.audio ?? 0}</strong> audio segments
+        </span>
       </div>
-
       <div
+        className={cn("upload-zone", dragging && "dragging")}
         onDragEnter={(event) => {
           event.preventDefault();
           setDragging(true);
@@ -220,234 +224,207 @@ export function LibraryWorkspace({
         onDragOver={(event) => event.preventDefault()}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
-        className={cn(
-          "mt-6 rounded-[24px] border border-dashed p-6 transition sm:p-8",
-          dragging
-            ? "border-cyan bg-cyan-soft/60"
-            : "border-slate-300 bg-white",
-        )}
       >
         {uploading ? (
-          <div className="mx-auto max-w-xl py-3">
-            <div className="flex items-center gap-3">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-cyan-soft text-cyan-deep">
-                <LoaderCircle className="size-5 animate-spin" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="truncate text-sm font-semibold text-ink">
-                    Processing {uploading.name}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+          <LoaderCircle size={24} className="animate-spin" />
         ) : (
-          <button
-            type="button"
+          <Upload size={24} />
+        )}
+        <div>
+          <h2>
+            {uploading ? `Processing ${uploading}` : "Add course material"}
+          </h2>
+          <p>
+            {uploading
+              ? "Indexing your source"
+              : "PDF, documents, slides, notes, or lecture audio"}
+          </p>
+        </div>
+        {!uploading && (
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => inputRef.current?.click()}
-            className="flex w-full flex-col items-center py-3 text-center focus-visible:outline-none"
           >
-            <span className="flex size-12 items-center justify-center rounded-2xl bg-cyan-soft text-cyan-deep">
-              <UploadCloud className="size-6" />
-            </span>
-            <strong className="mt-4 text-base text-ink">
-              Drop course material here
-            </strong>
-            <span className="mt-1 text-sm text-ink-muted">
-              PDF, DOCX, PPTX, HTML, or lecture audio · up to 25 MB documents /
-              100 MB audio
-            </span>
-          </button>
+            Browse files
+          </Button>
         )}
       </div>
-
       {lastUpload && (
-        <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
-          <span className="font-semibold">Latest:</span>
+        <p className="upload-status" role="status">
+          <Check size={15} className="shrink-0" />
           <span>
-            {lastUpload.chunks_added} chunks indexed from{" "}
-            {lastUpload.source_file}
+            {lastUpload.source_file} · {lastUpload.chunks_added} passages
+            indexed
           </span>
-          <span className="mx-1 text-emerald-300">/</span>
-          <span>{lastUpload.figures_captioned} figures captioned</span>
+        </p>
+      )}
+      {error && (
+        <div className="request-error library-error" role="alert">
+          <p>{error}</p>
+          <Button variant="ghost" size="sm" onClick={() => void load()}>
+            Retry
+          </Button>
         </div>
       )}
-
-      <section className="mt-10" aria-labelledby="library-heading">
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="eyebrow">Indexed sources</p>
-            <h2
-              id="library-heading"
-              className="mt-1 text-xl font-semibold text-ink"
-            >
-              Your material
-            </h2>
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="relative">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint" />
-              <input
-                value={filter}
-                onChange={(event) => setFilter(event.target.value)}
-                placeholder="Find a source"
-                className="h-10 w-full rounded-xl border border-line bg-white pl-9 pr-3 text-sm text-ink outline-none transition focus:border-cyan/50 focus:ring-2 focus:ring-cyan/10 sm:w-60"
-              />
-            </label>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => void load()}
-              disabled={loading}
-              className="rounded-xl border-line bg-white"
-              aria-label="Refresh library"
-            >
-              <RefreshCw className={cn(loading && "animate-spin")} />
-            </Button>
-          </div>
+      <section aria-labelledby="library-sources">
+        <div className="list-toolbar">
+          <h2 id="library-sources">Sources</h2>
+          <label className="search-field">
+            <Search size={15} />
+            <input
+              aria-label="Find a source"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              placeholder="Find a source"
+            />
+          </label>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => void load()}
+            disabled={loading}
+            aria-label="Refresh library"
+            title="Refresh library"
+          >
+            <RefreshCw size={16} className={cn(loading && "animate-spin")} />
+          </Button>
         </div>
-
         {loading ? (
-          <div className="grid gap-3">
-            {[1, 2, 3, 4].map((item) => (
-              <div
-                key={item}
-                className="h-28 animate-pulse rounded-2xl border border-line bg-white"
-              />
-            ))}
+          <div
+            className="loading-lines"
+            role="status"
+            aria-label="Loading sources"
+          >
+            <span />
+            <span />
+            <span />
           </div>
-        ) : visibleDocuments.length ? (
+        ) : visible.length ? (
           <div className="document-list">
-            {visibleDocuments.map((document) => {
+            <div className="document-columns" aria-hidden="true">
+              <span>Name</span>
+              <span>Format</span>
+              <span>Passages</span>
+              <span />
+            </div>
+            {visible.map((document) => {
               const Icon = documentIcon(document);
               return (
-                <article
-                  key={document.source_file}
-                  className="flex items-start gap-4 rounded-2xl border border-line bg-white p-4 transition hover:border-cyan/30 hover:shadow-[0_12px_28px_rgba(8,31,43,0.06)]"
-                >
-                  <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-ink">
-                    <Icon className="size-5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start gap-2">
-                      <div className="min-w-0 flex-1">
-                        <h3
-                          className="truncate text-sm font-semibold text-ink"
-                          title={document.source_file}
-                        >
-                          {document.source_file}
-                        </h3>
-                        <p className="mt-1 text-xs text-ink-muted">
-                          {document.pages ? `${document.pages} pages · ` : ""}
-                          {document.chunk_count} chunks
-                        </p>
-                      </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="rounded-lg text-ink-muted"
-                            aria-label={`Actions for ${document.source_file}`}
-                          >
-                            <MoreHorizontal />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <DropdownMenuItem
-                                onSelect={(event) => event.preventDefault()}
-                                className="text-destructive focus:text-destructive"
-                              >
-                                <Trash2 /> Remove source
-                              </DropdownMenuItem>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>
-                                  Remove this source?
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  {document.source_file} and its{" "}
-                                  {document.chunk_count} searchable chunks will
-                                  be removed from the index.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>
-                                  Keep source
-                                </AlertDialogCancel>
-                                <AlertDialogAction
-                                  variant="destructive"
-                                  onClick={() =>
-                                    void remove(document.source_file)
-                                  }
-                                >
-                                  Remove
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      <Badge
-                        variant="outline"
-                        className="border-line font-mono text-[10px] text-ink-muted"
-                      >
-                        {extension(document.source_file)}
-                      </Badge>
-                      {document.table_chunks > 0 && (
-                        <Badge
-                          variant="outline"
-                          className="border-line text-[10px] text-ink-muted"
-                        >
-                          <Table2 /> {document.table_chunks}
-                        </Badge>
-                      )}
-                      {document.visual_chunks > 0 && (
-                        <Badge
-                          variant="outline"
-                          className="border-line text-[10px] text-ink-muted"
-                        >
-                          <ImageIcon /> {document.visual_chunks}
-                        </Badge>
-                      )}
-                      {document.audio_chunks > 0 && (
-                        <Badge
-                          variant="outline"
-                          className="border-line text-[10px] text-ink-muted"
-                        >
-                          <FileAudio /> {document.audio_chunks}
-                        </Badge>
-                      )}
+                <article className="document-row" key={document.source_file}>
+                  <div className="document-name">
+                    <Icon size={22} />
+                    <div>
+                      <h3 title={document.source_file}>
+                        {document.source_file}
+                      </h3>
+                      <p>
+                        {document.pages ? (
+                          <span>{document.pages} pages</span>
+                        ) : null}
+                        <span className="document-mobile-count">{document.chunk_count} passages</span>
+                        {document.visual_chunks > 0 && (
+                          <span className="document-modalities">
+                            <ImageIcon size={12} />
+                            {document.visual_chunks} figures
+                          </span>
+                        )}
+                        {document.table_chunks > 0 && (
+                          <span className="document-modalities">
+                            <Table2 size={12} />
+                            {document.table_chunks} tables
+                          </span>
+                        )}
+                        {document.audio_chunks > 0 && (
+                          <span className="document-modalities">
+                            <FileAudio size={12} />
+                            {document.audio_chunks} segments
+                          </span>
+                        )}
+                      </p>
                     </div>
                   </div>
+                  <span className="document-kind">
+                    {extension(document.source_file)}
+                  </span>
+                  <span className="document-size">{document.chunk_count}</span>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Actions for ${document.source_file}`}
+                        title="Source actions"
+                      >
+                        <MoreHorizontal size={17} />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={() => setDeleteDocument(document)}
+                      >
+                        <Trash2 /> Remove source
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </article>
               );
             })}
           </div>
         ) : (
-          <div className="rounded-[24px] border border-line bg-white px-6 py-14 text-center">
-            <span className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-slate-100 text-ink-muted">
-              <BookOpen className="size-6" />
-            </span>
-            <h3 className="mt-4 font-semibold text-ink">
-              {filter
-                ? "No matching sources"
-                : "Your library is ready for its first source"}
-            </h3>
-            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink-muted">
-              {filter
-                ? "Try a different file name."
-                : "Add a textbook, slide deck, set of notes, or lecture recording to start asking grounded questions."}
-            </p>
-          </div>
+          !error && (
+            <div className="list-empty">
+              <h3>
+                {filter ? "No matching sources" : "Your library is empty"}
+              </h3>
+              <p>
+                {filter
+                  ? "Try another file name."
+                  : "No course material added yet."}
+              </p>
+              {!filter && (
+                <Button
+                  variant="outline"
+                  onClick={() => inputRef.current?.click()}
+                >
+                  <Plus /> Add material
+                </Button>
+              )}
+            </div>
+          )
         )}
       </section>
+      <AlertDialog
+        open={Boolean(deleteDocument)}
+        onOpenChange={(open) => {
+          if (!open && !removing) setDeleteDocument(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this source?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteDocument?.source_file} and its{" "}
+              {deleteDocument?.chunk_count} indexed passages will be removed.
+              Saved conversations will remain.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={removing}
+              onClick={(event) => {
+                event.preventDefault();
+                void remove();
+              }}
+            >
+              {removing ? "Removing..." : "Remove source"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

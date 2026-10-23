@@ -2,19 +2,14 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import {
-  ArrowRight,
-  BookMarked,
+  BookOpen,
   Check,
   ChevronDown,
   CircleHelp,
   Files,
-  Layers3,
   LoaderCircle,
   RotateCcw,
-  Sparkles,
 } from "lucide-react";
-import { toast } from "sonner";
-
 import { api } from "@/lib/api";
 import type {
   DocumentSummary,
@@ -23,41 +18,36 @@ import type {
   StudyResponse,
 } from "@/lib/rag-types";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EvidencePanel } from "@/components/workbench/evidence-panel";
 import { RichText } from "@/components/workbench/rich-text";
+import { SelectField } from "@/components/workbench/select-field";
 
 type Tool = "summary" | "compare" | "quiz";
-
-const toolInfo = {
-  summary: {
+const tools = [
+  {
+    id: "summary" as const,
+    label: "Summary",
     title: "Topic summary",
-    description:
-      "Build a concise, citation-grounded overview from your material.",
-    icon: BookMarked,
+    action: "Create summary",
+    icon: BookOpen,
   },
-  compare: {
+  {
+    id: "compare" as const,
+    label: "Compare",
     title: "Source comparison",
-    description: "See how two documents explain the same topic differently.",
+    action: "Compare sources",
     icon: Files,
   },
-  quiz: {
+  {
+    id: "quiz" as const,
+    label: "Practice",
     title: "Practice set",
-    description:
-      "Generate questions that stay traceable to a real source chunk.",
+    action: "Create practice set",
     icon: CircleHelp,
   },
-};
+];
 
 export function StudyWorkspace({ revision }: { revision: number }) {
   const [tool, setTool] = useState<Tool>("summary");
@@ -72,41 +62,66 @@ export function StudyWorkspace({ revision }: { revision: number }) {
     null,
   );
   const [loading, setLoading] = useState(false);
-  const busyRef = useRef(false);
+  const [error, setError] = useState("");
+  const [sourcesError, setSourcesError] = useState("");
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
+  const busyRef = useRef(false);
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   useEffect(() => {
+    let active = true;
     api
       .documents()
       .then((items) => {
+        if (!active) return;
         setDocuments(items);
-        if (items.length > 0) {
-          setSourceA((current) => current || items[0].source_file);
-          setSourceB(
-            (current) =>
-              current || items[1]?.source_file || items[0].source_file,
-          );
-        }
+        setSourcesError("");
+        setSourceA((current) =>
+          items.some((item) => item.source_file === current)
+            ? current
+            : (items[0]?.source_file ?? ""),
+        );
+        setSourceB((current) =>
+          items.some((item) => item.source_file === current)
+            ? current
+            : (items[1]?.source_file ?? ""),
+        );
+        setSource((current) =>
+          current === "all" ||
+          items.some((item) => item.source_file === current)
+            ? current
+            : "all",
+        );
       })
-      .catch(() => setDocuments([]));
+      .catch((cause: unknown) => {
+        if (active)
+          setSourcesError(
+            cause instanceof Error ? cause.message : "Could not load sources.",
+          );
+      });
+    return () => {
+      active = false;
+    };
   }, [revision]);
-
-  const resetResult = (next: Tool) => {
+  const chooseTool = (next: Tool) => {
+    if (busyRef.current) return;
     setTool(next);
     setResult(null);
     setRevealed(new Set());
+    setError("");
   };
-
   const run = async (event: FormEvent) => {
     event.preventDefault();
-    if (!topic.trim() || busyRef.current) return;
+    if (!topic.trim() || busyRef.current || !documents.length) return;
     if (tool === "compare" && (!sourceA || !sourceB || sourceA === sourceB)) {
-      toast.error("Choose two different sources to compare.");
+      setError("Choose two different sources to compare.");
       return;
     }
     busyRef.current = true;
     setLoading(true);
+    setError("");
     setResult(null);
+    setRevealed(new Set());
     try {
       const response =
         tool === "summary"
@@ -130,399 +145,320 @@ export function StudyWorkspace({ revision }: { revision: number }) {
                 source_file: source === "all" ? null : source,
               });
       setResult(response);
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "The study tool could not finish.",
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not finish. Your topic is still here; try again.",
       );
     } finally {
       busyRef.current = false;
       setLoading(false);
     }
   };
-
+  const active = tools.find((item) => item.id === tool)!;
   const isQuiz = result && "items" in result;
-  const studyResult = result && !isQuiz ? (result as StudyResponse) : null;
+  const study = result && !isQuiz ? (result as StudyResponse) : null;
   const evidence: EvidenceItem[] = isQuiz
     ? result.evidence
-    : (studyResult?.evidence ?? [
-        ...(studyResult?.evidence_a ?? []),
-        ...(studyResult?.evidence_b ?? []),
+    : (study?.evidence ?? [
+        ...(study?.evidence_a ?? []),
+        ...(study?.evidence_b ?? []),
       ]);
-  const ActiveIcon = toolInfo[tool].icon;
+  const sourceOptions = documents.map((document) => ({
+    value: document.source_file,
+    label: document.source_file,
+  }));
 
   return (
-    <div className="tools-workspace mx-auto w-full max-w-[1180px] px-4 pb-16 pt-7 sm:px-6 lg:px-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-ink">Study tools</h1>
+    <div className="workspace-page tools-workspace">
+      <div className="page-heading">
+        <div>
+          <h1>Study tools</h1>
+          <p>{documents.length} sources available</p>
+        </div>
       </div>
-
-      <Tabs
-        value={tool}
-        onValueChange={(value) => {
-          if (!loading) resetResult(value as Tool);
-        }}
+      <div className="tools-tabs" role="tablist" aria-label="Study tools">
+        {tools.map((item, index) => (
+          <button
+            ref={(element) => {
+              tabRefs.current[index] = element;
+            }}
+            id={`study-tab-${item.id}`}
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={tool === item.id}
+            aria-controls="study-tool-panel"
+            tabIndex={tool === item.id ? 0 : -1}
+            disabled={loading}
+            onClick={() => chooseTool(item.id)}
+            onKeyDown={(event) => {
+              let next = index;
+              if (event.key === "ArrowRight") next = (index + 1) % tools.length;
+              else if (event.key === "ArrowLeft")
+                next = (index + tools.length - 1) % tools.length;
+              else if (event.key === "Home") next = 0;
+              else if (event.key === "End") next = tools.length - 1;
+              else return;
+              event.preventDefault();
+              chooseTool(tools[next].id);
+              tabRefs.current[next]?.focus();
+            }}
+          >
+            <item.icon size={16} />
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {sourcesError && (
+        <div className="request-error" role="alert">
+          <p>{sourcesError}</p>
+        </div>
+      )}
+      <div
+        id="study-tool-panel"
+        role="tabpanel"
+        aria-labelledby={`study-tab-${tool}`}
+        className="study-layout"
       >
-        <TabsList
-          variant="line"
-          className="mb-6 h-auto w-full max-w-full justify-start gap-6 overflow-x-auto overflow-y-hidden rounded-none border-b border-line bg-transparent p-0 [scrollbar-width:none] sm:gap-8 [&::-webkit-scrollbar]:hidden"
-        >
-          {(Object.keys(toolInfo) as Tool[]).map((item) => {
-            const Icon = toolInfo[item].icon;
-            return (
-              <TabsTrigger
-                key={item}
-                value={item}
-                className="-mb-px h-11 flex-none rounded-none border-x-0 border-t-0 border-b-2 border-transparent px-1 text-sm text-ink-muted hover:text-ink data-[state=active]:border-cyan data-[state=active]:bg-transparent data-[state=active]:text-ink after:hidden"
-              >
-                <Icon /> {toolInfo[item].title}
-              </TabsTrigger>
-            );
-          })}
-        </TabsList>
-
-        {(Object.keys(toolInfo) as Tool[]).map((item) => (
-          <TabsContent key={item} value={item}>
-            <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-              <form
-                onSubmit={run}
-                className="study-controls h-fit border-r border-line p-5 lg:sticky lg:top-24 sm:p-6"
-              >
-                <span className="flex size-11 items-center justify-center rounded-xl bg-cyan-soft text-cyan-deep">
-                  <ActiveIcon className="size-5" />
-                </span>
-                <h2 className="mt-5 text-xl font-semibold text-ink">
-                  {toolInfo[tool].title}
-                </h2>
-
-                <div className="mt-6 space-y-5">
-                  <label className="block">
-                    <span className="mb-2 block text-sm font-semibold text-ink">
-                      Topic
-                    </span>
-                    <textarea
-                      value={topic}
-                      onChange={(event) => setTopic(event.target.value)}
-                      rows={3}
-                      maxLength={4000}
-                      placeholder="e.g. backpropagation and vanishing gradients"
-                      className="w-full resize-none rounded-xl border border-line bg-canvas px-3 py-3 text-sm leading-6 text-ink outline-none transition placeholder:text-ink-faint focus:border-cyan/50 focus:bg-card focus:ring-2 focus:ring-cyan/10"
-                    />
+        <form onSubmit={run} className="study-controls">
+          <h2>{active.title}</h2>
+          <fieldset disabled={loading} className="study-fields">
+            <label>
+              Topic
+              <textarea
+                aria-label="Topic"
+                value={topic}
+                onChange={(event) => setTopic(event.target.value)}
+                rows={3}
+                maxLength={4000}
+                placeholder="Enter a topic"
+              />
+            </label>
+            {tool === "compare" ? (
+              <>
+                <label>
+                  First source
+                  <SelectField
+                    label="First source"
+                    value={sourceA}
+                    onValueChange={setSourceA}
+                    options={sourceOptions}
+                    disabled={loading}
+                    placeholder="Choose a source"
+                  />
+                </label>
+                <label>
+                  Second source
+                  <SelectField
+                    label="Second source"
+                    value={sourceB}
+                    onValueChange={setSourceB}
+                    options={sourceOptions}
+                    disabled={loading}
+                    placeholder="Choose a source"
+                  />
+                </label>
+              </>
+            ) : (
+              <label>
+                Source
+                <SelectField
+                  label="Source"
+                  value={source}
+                  onValueChange={setSource}
+                  options={[
+                    { value: "all", label: "All sources" },
+                    ...sourceOptions,
+                  ]}
+                  disabled={loading}
+                />
+              </label>
+            )}
+            {tool === "quiz" && (
+              <>
+                <label>
+                  Question format
+                  <SelectField
+                    label="Question format"
+                    value={quizFormat}
+                    onValueChange={setQuizFormat}
+                    options={[
+                      { value: "mcq", label: "Multiple choice" },
+                      { value: "short_answer", label: "Short answer" },
+                      { value: "flashcard", label: "Flashcards" },
+                    ]}
+                    disabled={loading}
+                  />
+                </label>
+                <div>
+                  <label className="count-label" htmlFor="quiz-count">
+                    <span>Questions</span>
+                    <output>{quizCount}</output>
                   </label>
-
-                  {tool === "compare" ? (
-                    <div className="space-y-3">
-                      <label className="block text-sm font-semibold text-ink">
-                        Sources
-                      </label>
-                      <Select value={sourceA} onValueChange={setSourceA}>
-                        <SelectTrigger className="w-full rounded-xl border-line bg-white">
-                          <SelectValue placeholder="First source" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {documents.map((document) => (
-                            <SelectItem
-                              key={document.source_file}
-                              value={document.source_file}
-                            >
-                              {document.source_file}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <div className="flex justify-center">
-                        <ArrowRight className="size-4 rotate-90 text-ink-faint" />
-                      </div>
-                      <Select value={sourceB} onValueChange={setSourceB}>
-                        <SelectTrigger className="w-full rounded-xl border-line bg-white">
-                          <SelectValue placeholder="Second source" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {documents.map((document) => (
-                            <SelectItem
-                              key={document.source_file}
-                              value={document.source_file}
-                            >
-                              {document.source_file}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ) : (
-                    <label className="block">
-                      <span className="mb-2 block text-sm font-semibold text-ink">
-                        Source scope
-                      </span>
-                      <Select value={source} onValueChange={setSource}>
-                        <SelectTrigger className="w-full rounded-xl border-line bg-white">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All material</SelectItem>
-                          {documents.map((document) => (
-                            <SelectItem
-                              key={document.source_file}
-                              value={document.source_file}
-                            >
-                              {document.source_file}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </label>
-                  )}
-
-                  {tool === "quiz" && (
-                    <>
-                      <label className="block">
-                        <span className="mb-2 block text-sm font-semibold text-ink">
-                          Question format
-                        </span>
-                        <Select
-                          value={quizFormat}
-                          onValueChange={setQuizFormat}
-                        >
-                          <SelectTrigger className="w-full rounded-xl border-line bg-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="mcq">Multiple choice</SelectItem>
-                            <SelectItem value="short_answer">
-                              Short answer
-                            </SelectItem>
-                            <SelectItem value="flashcard">
-                              Flashcards
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </label>
-                      <div>
-                        <div className="mb-4 flex items-center justify-between text-sm">
-                          <span className="font-semibold text-ink">
-                            Question count
-                          </span>
-                          <Badge variant="outline" className="font-mono">
-                            {quizCount}
-                          </Badge>
-                        </div>
-                        <Slider
-                          value={[quizCount]}
-                          min={1}
-                          max={20}
-                          step={1}
-                          onValueChange={(value) => setQuizCount(value[0])}
-                          className="[&_[data-slot=slider-range]]:bg-cyan [&_[data-slot=slider-thumb]]:border-cyan"
-                        />
-                      </div>
-                    </>
-                  )}
+                  <Slider
+                    id="quiz-count"
+                    aria-label="Question count"
+                    value={[quizCount]}
+                    min={1}
+                    max={20}
+                    step={1}
+                    disabled={loading}
+                    onValueChange={(value) => setQuizCount(value[0])}
+                  />
                 </div>
-
-                <Button
-                  type="submit"
-                  disabled={loading || !topic.trim()}
-                  className="mt-7 w-full rounded-xl action-surface"
-                >
-                  {loading ? (
-                    <LoaderCircle className="animate-spin" />
-                  ) : (
-                    <Sparkles />
-                  )}
-                  {loading
-                    ? "Working from your sources…"
-                    : tool === "summary"
-                      ? "Create summary"
-                      : tool === "compare"
-                        ? "Compare sources"
-                        : "Generate practice set"}
-                </Button>
-              </form>
-
-              <div className="min-w-0">
-                {loading ? (
-                  <div className="rounded-[24px] border border-line bg-white p-8">
-                    <div className="flex items-center gap-3 text-sm font-semibold text-ink">
-                      <LoaderCircle className="size-5 animate-spin text-cyan-deep" />{" "}
-                      Building from verified evidence
-                    </div>
-                    <div className="mt-7 space-y-3">
-                      {[88, 100, 72, 94, 61].map((width) => (
-                        <div
-                          key={width}
-                          className="h-3 animate-pulse rounded-full bg-slate-100"
-                          style={{ width: `${width}%` }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ) : result ? (
-                  <div className="space-y-6">
-                    {isQuiz ? (
-                      <section className="space-y-3">
-                        <div className="mb-5 flex items-end justify-between">
-                          <div>
-                            <p className="eyebrow">Practice set</p>
-                            <h2 className="mt-1 text-xl font-semibold text-ink">
-                              {result.items.length} grounded questions
-                            </h2>
-                          </div>
-                          <Badge className="rounded-full bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
-                            {Math.round(result.grounded_rate * 100)}% grounded
-                          </Badge>
-                        </div>
-                        {result.items.map((quizItem, index) => {
-                          const isRevealed = revealed.has(index);
-                          return (
-                            <article
-                              key={`${quizItem.question}-${index}`}
-                              className="rounded-[22px] border border-line bg-white p-5 sm:p-6"
-                            >
-                              <div className="flex items-start gap-3">
-                                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg action-surface font-mono text-xs font-bold">
-                                  {String(index + 1).padStart(2, "0")}
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                  <h3 className="text-[16px] font-semibold leading-7 text-ink">
-                                    {quizItem.question}
-                                  </h3>
-                                  {quizItem.options && (
-                                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                                      {quizItem.options.map(
-                                        (option, optionIndex) => (
-                                          <div
-                                            key={option}
-                                            className={cn(
-                                              "rounded-xl border px-3 py-2.5 text-sm",
-                                              isRevealed &&
-                                                option === quizItem.answer
-                                                ? "border-emerald-300 bg-emerald-50 text-emerald-950"
-                                                : "border-line bg-canvas text-ink-muted",
-                                            )}
-                                          >
-                                            <span className="mr-2 font-mono text-xs">
-                                              {String.fromCharCode(
-                                                65 + optionIndex,
-                                              )}
-                                            </span>
-                                            {option}
-                                            {isRevealed &&
-                                              option === quizItem.answer && (
-                                                <Check className="ml-2 inline size-4" />
-                                              )}
-                                          </div>
-                                        ),
-                                      )}
-                                    </div>
-                                  )}
-                                  {isRevealed && (
-                                    <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                                      <p className="text-sm font-semibold text-emerald-950">
-                                        {quizItem.answer}
-                                      </p>
-                                      {quizItem.explanation && (
-                                        <p className="mt-2 text-sm leading-6 text-emerald-900">
-                                          {quizItem.explanation}
-                                        </p>
-                                      )}
-                                    </div>
-                                  )}
-                                  <div className="mt-4 flex items-center justify-between">
-                                    <span className="font-mono text-xs text-ink-faint">
-                                      {quizItem.citation_marker
-                                        ? `Source [${quizItem.citation_marker}]`
-                                        : "Source verified"}
-                                    </span>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() =>
-                                        setRevealed((current) => {
-                                          const next = new Set(current);
-                                          if (isRevealed) next.delete(index);
-                                          else next.add(index);
-                                          return next;
-                                        })
-                                      }
-                                      className="rounded-lg"
-                                    >
-                                      {isRevealed ? (
-                                        <RotateCcw />
-                                      ) : (
-                                        <ChevronDown />
-                                      )}
-                                      {isRevealed ? "Hide" : "Reveal answer"}
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-                            </article>
-                          );
-                        })}
-                      </section>
-                    ) : (
-                      <article className="rounded-[24px] border border-line bg-white p-6 shadow-[0_15px_38px_rgba(8,31,43,0.06)] sm:p-8">
-                        <div className="mb-6 flex items-center gap-3">
-                          <span className="flex size-10 items-center justify-center rounded-xl bg-cyan-soft text-cyan-deep">
-                            <ActiveIcon className="size-5" />
-                          </span>
-                          <div>
-                            <p className="font-semibold text-ink">
-                              {toolInfo[tool].title}
-                            </p>
-                            <p className="text-xs text-ink-muted">
-                              Synthesized from {evidence.length} evidence chunks
-                            </p>
-                          </div>
-                        </div>
-                        <RichText evidence={evidence}>
-                          {studyResult?.summary ||
-                            studyResult?.comparison ||
-                            ""}
-                        </RichText>
-                        <div className="mt-7 flex flex-wrap gap-2 border-t border-line pt-5">
-                          <Badge
-                            variant="outline"
-                            className="rounded-full border-line"
-                          >
-                            <Check className="text-emerald-600" />{" "}
-                            {Math.round(
-                              (studyResult?.citation_validity_rate ?? 0) * 100,
-                            )}
-                            % valid citations
-                          </Badge>
-                          {studyResult?.grounding_ratio != null && (
-                            <Badge
-                              variant="outline"
-                              className="rounded-full border-line"
-                            >
-                              <Layers3 className="text-cyan-deep" />{" "}
-                              {Math.round(studyResult.grounding_ratio * 100)}%
-                              grounded
-                            </Badge>
-                          )}
-                        </div>
-                      </article>
-                    )}
-                    <EvidencePanel items={evidence} />
-                  </div>
-                ) : (
-                  <div className="flex min-h-[320px] flex-col items-center justify-center px-6 text-center">
-                    <span className="flex size-14 items-center justify-center rounded-2xl bg-cyan-soft text-cyan-deep">
-                      <ActiveIcon className="size-6" />
-                    </span>
-                    <h2 className="mt-5 text-base font-semibold text-ink">
-                      No result yet
-                    </h2>
-                  </div>
-                )}
+              </>
+            )}
+          </fieldset>
+          <Button
+            type="submit"
+            disabled={loading || !topic.trim() || !documents.length}
+            className="study-submit"
+          >
+            {loading ? (
+              <LoaderCircle className="animate-spin" />
+            ) : (
+              <active.icon size={16} />
+            )}
+            {loading ? "Preparing..." : active.action}
+          </Button>
+          {error && (
+            <div className="request-error mt-4" role="alert">
+              <p>{error}</p>
+            </div>
+          )}
+        </form>
+        <div className="study-result" aria-busy={loading}>
+          {loading ? (
+            <div role="status">
+              <p className="state-text mb-5">
+                Preparing {active.label.toLowerCase()}...
+              </p>
+              <div className="loading-lines">
+                <span />
+                <span />
+                <span />
+                <span />
+                <span />
               </div>
             </div>
-          </TabsContent>
-        ))}
-      </Tabs>
+          ) : result ? (
+            <>
+              <div className="study-result-heading">
+                <h2>
+                  {isQuiz ? `${result.items.length} questions` : active.title}
+                </h2>
+                <span>
+                  {isQuiz
+                    ? `${Math.round(result.grounded_rate * 100)}% grounded`
+                    : `${evidence.length} evidence passages`}
+                </span>
+              </div>
+              {isQuiz ? (
+                <section aria-label="Practice questions">
+                  {result.items.map((item, index) => {
+                    const shown = revealed.has(index);
+                    return (
+                      <article
+                        className="quiz-item"
+                        key={`${item.question}-${index}`}
+                      >
+                        <div className="quiz-question">
+                          <span>{index + 1}.</span>
+                          <h3>{item.question}</h3>
+                        </div>
+                        {item.options && (
+                          <div className="quiz-options">
+                            {item.options.map((option, optionIndex) => (
+                              <div
+                                key={option}
+                                className={cn(
+                                  "quiz-option",
+                                  shown && option === item.answer && "correct",
+                                )}
+                              >
+                                <span>
+                                  {String.fromCharCode(65 + optionIndex)}
+                                </span>
+                                {option}
+                                {shown && option === item.answer && (
+                                  <Check size={14} className="shrink-0" />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {shown && (
+                          <div className="quiz-answer">
+                            <p className="font-medium">{item.answer}</p>
+                            {item.explanation && <p>{item.explanation}</p>}
+                          </div>
+                        )}
+                        <div className="quiz-actions">
+                          <span>
+                            {item.citation_marker
+                              ? `Source [${item.citation_marker}]`
+                              : "No citation recorded"}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setRevealed((current) => {
+                                const next = new Set(current);
+                                if (shown) next.delete(index);
+                                else next.add(index);
+                                return next;
+                              })
+                            }
+                          >
+                            {shown ? (
+                              <RotateCcw size={14} />
+                            ) : (
+                              <ChevronDown size={14} />
+                            )}
+                            {shown ? "Hide answer" : "Reveal answer"}
+                          </Button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </section>
+              ) : (
+                <article>
+                  <RichText evidence={evidence}>
+                    {study?.summary || study?.comparison || ""}
+                  </RichText>
+                  <div className="result-metrics">
+                    <span>
+                      {study?.citation_validity_rate == null
+                        ? "Citation validity not recorded"
+                        : `${Math.round(study.citation_validity_rate * 100)}% valid citations`}
+                    </span>
+                    {study?.grounding_ratio != null && (
+                      <span>
+                        {Math.round(study.grounding_ratio * 100)}% grounded
+                      </span>
+                    )}
+                  </div>
+                </article>
+              )}
+              <div className="study-evidence">
+                <EvidencePanel items={evidence} />
+              </div>
+            </>
+          ) : (
+            <div className="study-empty">
+              <active.icon size={24} strokeWidth={1.5} />
+              <h2>
+                {documents.length ? "No result yet" : "No sources available"}
+              </h2>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
