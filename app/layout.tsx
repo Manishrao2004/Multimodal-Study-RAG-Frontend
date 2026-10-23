@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 import "./footer-layout.css";
+import "./workspace.css";
 
 export const metadata: Metadata = {
   title: "Verity Study — Evidence-first learning",
