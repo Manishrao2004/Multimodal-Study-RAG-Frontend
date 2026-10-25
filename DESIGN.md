@@ -306,3 +306,17 @@ Inline citation markers are compact (22px high, 4px corners) blue-backed links; 
 
 Not canonized or repaired: no new defect is established by this source-only documentation pass. Local exceptions (14px user paragraphs, 11px metadata, 7px tab wrapper) remain component facts rather than new global tokens. The previously fixed scrolling, selector, and switch issues are not inherited as design rules.
 
+## Document reader
+
+Library and citation sheets show formatted PDF, Word and PowerPoint pages by
+default. A compact wrapping toolbar provides page/slide selection and fit/zoom;
+the document fits both dimensions of its reading stage initially. The Text tab
+keeps extracted content secondary. Preview images override generic evidence-image
+styles so they retain their own aspect ratio and sizing.
+
+Open full document links to the dedicated `/reader` route in a separate tab,
+carrying the source name, current page, and optional citation ID. This route has a
+quiet filename/back toolbar and a document stage that fills the remaining viewport;
+it does not use browser fullscreen or an expanded sheet. Controls wrap on narrow
+screens and the page stage owns scrolling. Source documents remain local.
+

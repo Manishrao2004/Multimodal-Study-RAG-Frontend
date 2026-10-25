@@ -39,10 +39,7 @@ export function RichText({
                       ? onCitationClick(Number(marker))
                       : document
                           .getElementById(`evidence-${marker}`)
-                          ?.scrollIntoView({
-                            behavior: "smooth",
-                            block: "center",
-                          })
+                          ?.click()
                   }
                   className="citation-link"
                   aria-label={`Go to source ${marker}`}

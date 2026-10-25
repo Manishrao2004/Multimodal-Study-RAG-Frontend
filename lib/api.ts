@@ -38,6 +38,17 @@ async function request<T>(
   try {
     response = await fetch(`${API_BASE}${path}`, {
       ...init,
+      headers: (() => {
+        const headers = new Headers(init?.headers);
+        if (typeof window !== "undefined") {
+          headers.set("X-Student-Timezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
+          try {
+            const location = window.localStorage.getItem("verity-student-location") ?? "India";
+            if (location) headers.set("X-Student-Location", encodeURIComponent(location.slice(0, 200)));
+          } catch { /* Storage can be disabled by the browser. */ }
+        }
+        return headers;
+      })(),
       signal: init?.signal ?? AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {

@@ -48,3 +48,25 @@ The workspace is dark-only. Navigation and searchable history share one sidebar;
 mobile navigation, settings, and evidence open only on request. General-knowledge
 and document-supported answer provenance remain distinct. The design system is
 documented in `DESIGN.md`, with product constraints in `PRODUCT.md`.
+
+## Sources and answer context
+
+Click a library source name or an answer citation to open its viewer inside the
+app. PDF, Word and PowerPoint show their formatted pages immediately in the compact
+preview. Word/PowerPoint conversion uses local Microsoft Office or LibreOffice.
+Fit page is the default; fit width, numeric zoom, keyboard arrows and page/slide
+jumping are available. The Text tab provides extracted content separately.
+
+Open full document opens `/reader?source=...&page=...` in a separate tab, preserving
+the selected file and current page. It does not resize the sheet, activate browser
+fullscreen or download the original file. The dedicated reader uses the available
+window height, including on mobile. HTML, Markdown and plain text use a safe text
+view; audio is
+represented by its saved transcript. Cited passages are
+highlighted in the reading view. Missing originals retain the saved evidence.
+
+Study engine settings include a country/region preference, defaulting to India
+and INR examples. The browser sends its timezone for current dates and scheduling;
+no GPS or precise location is collected. Explicit countries/currencies in a
+question override the default. Current legal, financial and other changing facts
+still require verification; the app does not claim to have searched the web.

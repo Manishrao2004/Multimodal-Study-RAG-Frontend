@@ -3,10 +3,10 @@
 /* eslint-disable @next/next/no-img-element -- Evidence images are served by the backend. */
 
 import { useId, useState } from "react";
-import { ExternalLink, FileText } from "lucide-react";
+import { FileText } from "lucide-react";
 import { API_BASE, formatTimestamp } from "@/lib/api";
 import type { EvidenceItem } from "@/lib/rag-types";
-import { Button } from "@/components/ui/button";
+import { SourceDocument } from "@/components/workbench/source-document";
 import {
   Sheet,
   SheetContent,
@@ -102,7 +102,7 @@ export function EvidencePanel({
           if (!open) setSelected(null);
         }}
       >
-        <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+        <SheetContent className="document-preview-sheet w-full overflow-y-auto sm:max-w-5xl">
           {selected && (
             <>
               <SheetHeader>
@@ -114,6 +114,7 @@ export function EvidencePanel({
                 </SheetDescription>
               </SheetHeader>
               <div className="evidence-detail">
+                <SourceDocument key={selected.chunk.chunk_id} chunk={selected.chunk} />
                 {/* Source images are served by the backend, not build-time assets. */}
                 {selected.chunk.image_ref && (
                   <img
@@ -121,7 +122,7 @@ export function EvidencePanel({
                     alt={`Source figure from ${selected.chunk.source_file}`}
                   />
                 )}
-                <p>{selected.chunk.text}</p>
+                <div className="cited-passage"><h3>Supporting passage</h3><p><mark>{selected.chunk.text}</mark></p></div>
                 <div className="evidence-metrics">
                   <div className="metric-tile">
                     <span>Answer contribution</span>
@@ -136,15 +137,6 @@ export function EvidencePanel({
                     <strong>{selected.rerank_score.toFixed(3)}</strong>
                   </div>
                 </div>
-                <Button variant="outline" asChild>
-                  <a
-                    href={`${API_BASE}/evidence/${encodeURIComponent(selected.chunk.chunk_id)}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <ExternalLink size={15} /> Open raw evidence
-                  </a>
-                </Button>
               </div>
             </>
           )}

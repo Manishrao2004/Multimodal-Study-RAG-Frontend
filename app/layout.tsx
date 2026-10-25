@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import "./globals.css";
 import "./workspace.css";
+import "./document-reader.css";
 
 export const metadata: Metadata = {
   title: "Verity Study — Evidence-first learning",

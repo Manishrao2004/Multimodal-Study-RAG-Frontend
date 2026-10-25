@@ -1107,6 +1107,12 @@
   font-size: 11px;
   color: var(--ink-muted);
 }
+.source-name-button { text-align: left; overflow-wrap: anywhere; color: inherit; cursor: pointer; }
+.source-name-button:hover { text-decoration: underline; text-underline-offset: 4px; }
+.source-name-button:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+.cited-passage mark { color: var(--ink); background: var(--cyan-soft); box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.context-location-input { width: 100%; min-height: 42px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; color: var(--ink); background: var(--canvas); }
+.context-location-input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .evidence-heading {
   display: flex;
   align-items: center;

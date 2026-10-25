@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { SourceDocument } from "@/components/workbench/source-document";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import type {
   DocumentSummary,
   IngestResponse,
@@ -62,6 +64,7 @@ export function LibraryWorkspace({
   onLibraryChanged: () => void;
 }) {
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
+  const [selectedSource, setSelectedSource] = useState<string | null>(null);
   const [stats, setStats] = useState<KnowledgeBaseStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -316,7 +319,9 @@ export function LibraryWorkspace({
                     <Icon size={22} />
                     <div>
                       <h3 title={document.source_file}>
-                        {document.source_file}
+                        <button type="button" className="source-name-button" onClick={() => setSelectedSource(document.source_file)} aria-label={`Open source ${document.source_file}`}>
+                          {document.source_file}
+                        </button>
                       </h3>
                       <p>
                         {document.pages ? (
@@ -360,6 +365,9 @@ export function LibraryWorkspace({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => setSelectedSource(document.source_file)}>
+                        <FileText /> Open source
+                      </DropdownMenuItem>
                       <DropdownMenuItem
                         variant="destructive"
                         onSelect={() => setDeleteDocument(document)}
@@ -395,6 +403,17 @@ export function LibraryWorkspace({
           )
         )}
       </section>
+      <Sheet open={selectedSource !== null} onOpenChange={(open) => { if (!open) setSelectedSource(null); }}>
+        <SheetContent className="document-preview-sheet w-full overflow-y-auto sm:max-w-5xl">
+          <SheetHeader>
+            <SheetTitle className="break-words pr-7">{selectedSource}</SheetTitle>
+            <SheetDescription>Original source and indexed content</SheetDescription>
+          </SheetHeader>
+          <div className="evidence-detail">
+            {selectedSource && <SourceDocument key={selectedSource} sourceFile={selectedSource} />}
+          </div>
+        </SheetContent>
+      </Sheet>
       <AlertDialog
         open={Boolean(deleteDocument)}
         onOpenChange={(open) => {

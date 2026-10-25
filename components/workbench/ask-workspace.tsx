@@ -98,7 +98,7 @@ function AnswerMessage({ message }: { message: StoredMessage }) {
     window.requestAnimationFrame(() =>
       document
         .getElementById(`evidence-${message.id}-${marker}`)
-        ?.scrollIntoView({ behavior: "smooth", block: "center" }),
+        ?.click(),
     );
   };
   const copy = async () => {
