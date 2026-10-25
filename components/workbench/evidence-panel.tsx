@@ -36,7 +36,6 @@ export function EvidencePanel({
   idPrefix?: string;
 }) {
   const [selected, setSelected] = useState<EvidenceItem | null>(null);
-  const [expanded, setExpanded] = useState(false);
   const headingId = useId();
   if (!items.length) return null;
   const grouped = Array.from(
@@ -100,10 +99,10 @@ export function EvidencePanel({
       <Sheet
         open={Boolean(selected)}
         onOpenChange={(open) => {
-          if (!open) { setSelected(null); setExpanded(false); }
+          if (!open) setSelected(null);
         }}
       >
-        <SheetContent className={expanded ? "source-viewer-sheet source-viewer-expanded w-screen overflow-y-auto sm:max-w-none" : "source-viewer-sheet w-full overflow-y-auto sm:max-w-4xl"}>
+        <SheetContent className="document-preview-sheet w-full overflow-y-auto sm:max-w-5xl">
           {selected && (
             <>
               <SheetHeader>
@@ -115,7 +114,7 @@ export function EvidencePanel({
                 </SheetDescription>
               </SheetHeader>
               <div className="evidence-detail">
-                <SourceDocument key={selected.chunk.chunk_id} chunk={selected.chunk} expanded={expanded} onExpand={setExpanded} />
+                <SourceDocument key={selected.chunk.chunk_id} chunk={selected.chunk} />
                 {/* Source images are served by the backend, not build-time assets. */}
                 {selected.chunk.image_ref && (
                   <img

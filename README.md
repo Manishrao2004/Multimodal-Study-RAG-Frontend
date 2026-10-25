@@ -52,13 +52,16 @@ documented in `DESIGN.md`, with product constraints in `PRODUCT.md`.
 ## Sources and answer context
 
 Click a library source name or an answer citation to open its viewer inside the
-app. PDF pages render as images with page navigation, avoiding browser download
-prompts. Office documents, HTML, Markdown and text show indexed content; original
-Open full document renders the original Word pages and PowerPoint slides locally
-through Microsoft Office (Windows) or LibreOffice, retaining their visual layout.
-The reader includes Previous/Next, direct page/slide selection and zoom. This does
-not activate browser fullscreen or download the original file. Extracted text
-is available separately as a fallback. Audio is
+app. PDF, Word and PowerPoint show their formatted pages immediately in the compact
+preview. Word/PowerPoint conversion uses local Microsoft Office or LibreOffice.
+Fit page is the default; fit width, numeric zoom, keyboard arrows and page/slide
+jumping are available. The Text tab provides extracted content separately.
+
+Open full document opens `/reader?source=...&page=...` in a separate tab, preserving
+the selected file and current page. It does not resize the sheet, activate browser
+fullscreen or download the original file. The dedicated reader uses the available
+window height, including on mobile. HTML, Markdown and plain text use a safe text
+view; audio is
 represented by its saved transcript. Cited passages are
 highlighted in the reading view. Missing originals retain the saved evidence.
 

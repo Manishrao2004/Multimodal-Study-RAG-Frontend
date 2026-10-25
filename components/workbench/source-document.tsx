@@ -1,96 +1,83 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { ArrowLeft, ExternalLink } from "lucide-react";
 import { PdfPages } from "@/components/workbench/pdf-pages";
-import { Maximize2, Minimize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { API_BASE, formatTimestamp } from "@/lib/api";
 import type { Chunk } from "@/lib/rag-types";
 
-interface SourcePreview { source_file: string; original_available: boolean; chunks: Chunk[]; full_sections: {title: string; text: string}[]; preview_warning: string | null }
+interface SourcePreview {
+  source_file: string;
+  original_available: boolean;
+  chunks: Chunk[];
+  full_sections: { title: string; text: string }[];
+  preview_warning: string | null;
+}
 
-export function SourceDocument({ chunk, sourceFile, expanded = false, onExpand }: { chunk?: Chunk; sourceFile?: string; expanded?: boolean; onExpand?: (open: boolean) => void }) {
+export function SourceDocument({ chunk, sourceFile, fullPage = false, initialPage, citationId }: {
+  chunk?: Chunk;
+  sourceFile?: string;
+  fullPage?: boolean;
+  initialPage?: number;
+  citationId?: string;
+}) {
   const name = chunk?.source_file ?? sourceFile ?? "";
+  const firstPage = Math.max(1, initialPage ?? chunk?.page_number ?? 1);
+  const [currentPage, setCurrentPage] = useState(firstPage);
   const [preview, setPreview] = useState<SourcePreview | null>(null);
   const [error, setError] = useState("");
-  const [sectionIndex, setSectionIndex] = useState(0);
-  const selectedPassage = useRef<HTMLElement | null>(null);
-  const readingView = useRef<HTMLDivElement | null>(null);
-  const page = Math.max(1, chunk?.page_number ?? 1);
+  const [tab, setTab] = useState<"document" | "text">("document");
+  const [retry, setRetry] = useState(0);
   const extension = name.split(".").pop()?.toLowerCase();
-  const isAudio = ["mp3", "mpga", "wav", "m4a", "flac", "ogg"].includes(extension ?? "");
-  const isVideo = ["mp4", "webm"].includes(extension ?? "");
+  const formatted = ["pdf", "docx", "pptx"].includes(extension ?? "");
+  const selected = chunk ?? preview?.chunks.find(item => item.chunk_id === citationId);
+  const readerParams = new URLSearchParams({ source: name, page: String(currentPage) });
+  if (selected) readerParams.set("citation", selected.chunk_id);
+
   useEffect(() => {
     const controller = new AbortController();
     fetch(`${API_BASE}/documents/${encodeURIComponent(name)}/preview`, { signal: controller.signal })
-      .then(async (response) => {
+      .then(async response => {
         if (!response.ok) throw new Error("This source is no longer indexed. Refresh the library to check its status.");
         const result: SourcePreview = await response.json();
+        if (result.source_file !== name) throw new Error("The source did not match the selected document.");
         result.full_sections ??= [];
         result.preview_warning ??= null;
-        if (result.source_file !== name) throw new Error("The source did not match the selected document.");
-        if (!controller.signal.aborted) {
-          setPreview(result);
-          const normalized = (text: string) => text.replace(/\s+/g, " ").trim();
-          const match = chunk ? result.full_sections.findIndex(section => normalized(section.text).includes(normalized(chunk.text).slice(0, 80))) : -1;
-          setSectionIndex(extension === "pptx" && chunk?.page_number != null ? Math.min(Math.max(0, chunk.page_number - 1), Math.max(0, result.full_sections.length - 1)) : Math.max(0, match));
-        }
+        if (!controller.signal.aborted) setPreview(result);
       })
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load source.");
-      });
+      .catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load the source."); });
     return () => controller.abort();
-  }, [name, chunk, extension]);
-  useEffect(() => {
-    const selected = selectedPassage.current;
-    const container = readingView.current;
-    if (preview && chunk && selected && container) {
-      container.scrollTop += selected.getBoundingClientRect().top - container.getBoundingClientRect().top;
-    }
-  }, [preview, chunk]);
-  return (
-    <section className={`source-document${expanded ? " is-full-reader" : ""}`} aria-label={`Source document ${name}`}>
-      {expanded && <h2 className="full-reader-title">{name}</h2>}
-      <div className="source-document-heading">
-        <h3>{chunk?.page_number != null ? `Original document · page ${page}` : "Original source"}</h3>
-        {onExpand && <Button variant="outline" size="sm" onClick={() => onExpand(!expanded)} aria-pressed={expanded}>
-          {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-          {expanded ? "Back to citation" : "Open full document"}
-        </Button>}
+  }, [name, retry]);
+
+  const showPages = formatted && preview?.original_available && tab === "document";
+  const retrySource = () => { setError(""); setPreview(null); setRetry(value => value + 1); };
+
+  return <section className="document-viewer" data-layout={fullPage ? "page" : "panel"} aria-label={`Source document ${name}`}>
+    <header className="document-viewer-heading">
+      {fullPage ? <div className="document-reader-title"><Link href="/" aria-label="Back to workspace" title="Back to workspace"><ArrowLeft size={20} /></Link><h1 title={name}>{name}</h1></div> : <h3>Document preview</h3>}
+      <div className="document-viewer-actions">
+        {formatted && <div className="document-viewer-tabs" role="group" aria-label="Source view">
+          <button type="button" aria-pressed={tab === "document"} onClick={() => setTab("document")}>Document</button>
+          <button type="button" aria-pressed={tab === "text"} onClick={() => setTab("text")}>Text</button>
+        </div>}
+        {!fullPage && <Link className="document-open-reader" href={`/reader?${readerParams.toString()}`} target="_blank" rel="noopener noreferrer" prefetch={false}><ExternalLink size={15} /><span>Open full document</span></Link>}
       </div>
-      {error ? <p role="alert">{error} {chunk && "The saved cited passage is shown below."}</p> : !preview ? <p role="status">Loading source…</p> : (
-        <>
-          {!preview.original_available && <p role="status">The original file is unavailable. You can still read its indexed content below.</p>}
-          {preview.original_available && (extension === "pdf" || (expanded && ["docx", "pptx"].includes(extension ?? ""))) && <>
-            <PdfPages name={name} initialPage={page} kind={extension === "pptx" ? "Slide" : "Page"} />
-          </>}
-          {preview.preview_warning && <p role="status">{preview.preview_warning}</p>}
-          <details open={!expanded || !["pdf", "docx", "pptx"].includes(extension ?? "") || !preview.original_available}>
-          <summary>Extracted text and supporting passages</summary>
-          <h3>{isAudio || isVideo ? "Transcript" : preview.full_sections.length ? "Full document text" : "Reading view"}</h3>
-          {!["pdf", "mp3", "mpga", "wav", "m4a", "flac", "ogg", "mp4", "webm"].includes(extension ?? "") && <p className="state-text">Read the extracted content here. Word and slide layouts are simplified; HTML is displayed as safe text.</p>}
-          {preview.full_sections.length > 0 && <div className="document-section-controls">
-            <Button variant="outline" size="sm" disabled={sectionIndex <= 0} onClick={() => { setSectionIndex(sectionIndex - 1); if (readingView.current) readingView.current.scrollTop = 0; }}>Previous</Button>
-            <label> {extension === "pptx" ? "Slide" : "Section"} {sectionIndex + 1} of {preview.full_sections.length}
-              <select aria-label={extension === "pptx" ? "Go to slide" : "Go to document section"} value={sectionIndex} onChange={(event) => { setSectionIndex(Number(event.target.value)); if (readingView.current) readingView.current.scrollTop = 0; }}>
-                {preview.full_sections.map((section, index) => <option value={index} key={index}>{index + 1}. {section.title.slice(0, 80)}</option>)}
-              </select>
-            </label>
-            <Button variant="outline" size="sm" disabled={sectionIndex >= preview.full_sections.length - 1} onClick={() => { setSectionIndex(sectionIndex + 1); if (readingView.current) readingView.current.scrollTop = 0; }}>Next</Button>
-          </div>}
-          <div className="source-reading-view" ref={readingView}>
-            {preview.full_sections.length ? <section className="source-reading-passage">
-              <h4>{preview.full_sections[sectionIndex]?.title}</h4><p>{preview.full_sections[sectionIndex]?.text || "No readable text on this slide or section."}</p>
-            </section> : preview.chunks.map((passage) => <section key={passage.chunk_id}
-              ref={passage.chunk_id === chunk?.chunk_id ? (node) => { selectedPassage.current = node; } : undefined}
-              className={passage.chunk_id === chunk?.chunk_id ? "cited-passage" : "source-reading-passage"}>
-              <p className="state-text">{passage.timestamp_start != null ? formatTimestamp(passage.timestamp_start) : passage.page_number != null ? `${extension === "pptx" ? "Slide" : "Page"} ${passage.page_number}` : passage.section_path || "Passage"}</p>
-              <p>{passage.chunk_id === chunk?.chunk_id ? <mark>{passage.text}</mark> : passage.text}</p>
-            </section>)}
-          </div>
-          </details>
-        </>
-      )}
-    </section>
-  );
+    </header>
+    <div className="document-viewer-body">
+      {error ? <div className="document-reader-state" role="alert"><p>{error}</p><Button variant="outline" size="sm" onClick={retrySource}>Retry source</Button>{selected && <p>{selected.text}</p>}</div>
+        : !preview ? <div className="document-reader-state" role="status">Loading document…</div>
+        : showPages ? <PdfPages name={name} initialPage={currentPage} kind={extension === "pptx" ? "Slide" : "Page"} onPageChange={setCurrentPage} />
+        : <div className="document-text-view">
+          {!preview.original_available && <p className="document-source-notice" role="status">The original file is unavailable. Its saved text is shown below.</p>}
+          {preview.preview_warning && <p className="document-source-notice" role="status">{preview.preview_warning}</p>}
+          {selected && <section className="document-cited-text"><h3>Cited passage</h3><p><mark>{selected.text}</mark></p></section>}
+          {preview.full_sections.length > 0 ? preview.full_sections.map((section, index) => <section key={index}><h3>{section.title}</h3><p>{section.text || "No readable text in this section."}</p></section>) : preview.chunks.map(passage => <section key={passage.chunk_id} className={passage.chunk_id === selected?.chunk_id ? "document-cited-text" : undefined}>
+            <h3>{passage.timestamp_start != null ? formatTimestamp(passage.timestamp_start) : passage.page_number != null ? `${extension === "pptx" ? "Slide" : "Page"} ${passage.page_number}` : passage.section_path || "Passage"}</h3>
+            <p>{passage.text}</p>
+          </section>)}
+        </div>}
+    </div>
+  </section>;
 }

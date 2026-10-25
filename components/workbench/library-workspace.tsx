@@ -65,7 +65,6 @@ export function LibraryWorkspace({
 }) {
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
-  const [sourceExpanded, setSourceExpanded] = useState(false);
   const [stats, setStats] = useState<KnowledgeBaseStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -404,14 +403,14 @@ export function LibraryWorkspace({
           )
         )}
       </section>
-      <Sheet open={selectedSource !== null} onOpenChange={(open) => { if (!open) { setSelectedSource(null); setSourceExpanded(false); } }}>
-        <SheetContent className={sourceExpanded ? "source-viewer-sheet source-viewer-expanded w-screen overflow-y-auto sm:max-w-none" : "source-viewer-sheet w-full overflow-y-auto sm:max-w-4xl"}>
+      <Sheet open={selectedSource !== null} onOpenChange={(open) => { if (!open) setSelectedSource(null); }}>
+        <SheetContent className="document-preview-sheet w-full overflow-y-auto sm:max-w-5xl">
           <SheetHeader>
             <SheetTitle className="break-words pr-7">{selectedSource}</SheetTitle>
             <SheetDescription>Original source and indexed content</SheetDescription>
           </SheetHeader>
           <div className="evidence-detail">
-            {selectedSource && <SourceDocument key={selectedSource} sourceFile={selectedSource} expanded={sourceExpanded} onExpand={setSourceExpanded} />}
+            {selectedSource && <SourceDocument key={selectedSource} sourceFile={selectedSource} />}
           </div>
         </SheetContent>
       </Sheet>
