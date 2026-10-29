@@ -558,6 +558,8 @@
   font-size: 13px;
 }
 .workspace-select-trigger > [data-slot="select-value"] {
+  min-width: 0;
+  flex: 1;
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -944,11 +946,14 @@
   margin-bottom: 24px;
 }
 .study-fields {
+  min-inline-size: 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 22px;
 }
 .study-fields label {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 9px;
@@ -1388,3 +1393,30 @@
     gap: 5px;
   }
 }
+
+/* Active study and screenshot controls follow the workspace palette. */
+.practice-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin: 16px 0 24px; font-size: 13px; color: var(--ink-muted); }
+.study-result-topic { font-size: 16px; color: var(--ink); overflow-wrap: anywhere; }
+.saved-studies { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); min-width: 0; }
+.saved-studies > summary { cursor: pointer; color: var(--ink-muted); font-size: 13px; padding: 4px 0; }
+.saved-studies > summary:hover { color: var(--ink); }
+.saved-studies > summary:focus-visible { outline: 2px solid var(--cyan); outline-offset: 4px; }
+.saved-studies-content { display: grid; gap: 12px; min-width: 0; margin-top: 16px; }
+.saved-studies-content > button { justify-self: start; }
+.saved-studies .state-text { font-size: 12px; }
+button.quiz-option { width: 100%; text-align: left; cursor: pointer; }
+button.quiz-option:hover:not(:disabled), .quiz-option.selected { border-color: var(--cyan); color: var(--ink); background: var(--cyan-soft); }
+button.quiz-option.correct { color: var(--success); background: var(--success-surface); border-color: var(--success); }
+button.quiz-option.incorrect { color: var(--destructive); background: var(--danger-surface); border-color: var(--destructive); }
+button.quiz-option:disabled { cursor: default; }
+.practice-written { display: grid; gap: 8px; margin: 18px 0 0 32px; color: var(--ink-muted); font-size: 13px; }
+.practice-written textarea { width: 100%; padding: 12px; border: 1px solid var(--input); border-radius: 6px; background: var(--canvas); color: var(--ink); resize: vertical; font-size: 16px; }
+.flashcard-face { display: flex; flex-direction: column; justify-content: space-between; align-items: center; gap: 32px; width: 100%; min-height: 280px; padding: 24px; background: var(--card); color: var(--ink); border: 1px solid var(--input); border-radius: 8px; text-align: center; font-size: 18px; line-height: 1.6; overflow-wrap: anywhere; cursor: pointer; }
+.flashcard-face .state-text { font-size: 13px; }
+.practice-complete { display: grid; gap: 16px; padding: 24px 0; line-height: 1.7; }
+.practice-complete h3 { font-size: 18px; color: var(--ink); }
+.quiz-option:focus-visible, .flashcard-face:focus-visible, .practice-written textarea:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+.screenshot-options { display: flex; flex-wrap: wrap; gap: 12px 20px; padding: 8px 0 16px; color: var(--ink-muted); font-size: 12px; }
+.screenshot-options label { display: inline-flex; align-items: center; gap: 8px; }
+.screenshot-options input { accent-color: var(--cyan); }
+.screenshot-options p { flex-basis: 100%; }

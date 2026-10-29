@@ -3,12 +3,9 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   BookOpen,
-  Check,
-  ChevronDown,
   CircleHelp,
   Files,
   LoaderCircle,
-  RotateCcw,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type {
@@ -17,7 +14,8 @@ import type {
   QuizResponse,
   StudyResponse,
 } from "@/lib/rag-types";
-import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { PracticeSession } from "./practice-session";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { EvidencePanel } from "@/components/workbench/evidence-panel";
@@ -49,6 +47,9 @@ const tools = [
   },
 ];
 
+type SavedStudy = { id: string; tool: Tool; topic: string; format: string; source: string; sourceA: string; sourceB: string; result: StudyResponse | QuizResponse };
+const STORAGE_KEY = "verity-study-sessions-v1";
+
 export function StudyWorkspace({ revision }: { revision: number }) {
   const [tool, setTool] = useState<Tool>("summary");
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
@@ -64,7 +65,24 @@ export function StudyWorkspace({ revision }: { revision: number }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [sourcesError, setSourcesError] = useState("");
-  const [revealed, setRevealed] = useState<Set<number>>(new Set());
+  const [saved, setSaved] = useState<SavedStudy[]>([]);
+  const [resultTopic, setResultTopic] = useState("");
+  const [resultFormat, setResultFormat] = useState("mcq");
+  const [sessionKey, setSessionKey] = useState(0);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+      if (Array.isArray(stored)) setSaved(stored.filter(s => s && typeof s.id === "string" && typeof s.topic === "string" && ["summary", "compare", "quiz"].includes(s.tool) && s.result && (typeof s.result.summary === "string" || typeof s.result.comparison === "string" || (Array.isArray(s.result.items) && Array.isArray(s.result.evidence)))).slice(0, 12));
+    } catch { toast.error("Saved study sessions could not be read."); }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+  const store = (sessions: SavedStudy[]) => {
+    setSaved(sessions);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions)); }
+    catch { toast.error("Browser storage is full or unavailable. Export this result to keep it."); }
+  };
   const busyRef = useRef(false);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -107,7 +125,6 @@ export function StudyWorkspace({ revision }: { revision: number }) {
     if (busyRef.current) return;
     setTool(next);
     setResult(null);
-    setRevealed(new Set());
     setError("");
   };
   const run = async (event: FormEvent) => {
@@ -121,7 +138,6 @@ export function StudyWorkspace({ revision }: { revision: number }) {
     setLoading(true);
     setError("");
     setResult(null);
-    setRevealed(new Set());
     try {
       const response =
         tool === "summary"
@@ -145,6 +161,10 @@ export function StudyWorkspace({ revision }: { revision: number }) {
                 source_file: source === "all" ? null : source,
               });
       setResult(response);
+      setResultTopic(topic.trim());
+      setResultFormat(quizFormat);
+      setSessionKey(key => key + 1);
+      store([{ id: crypto.randomUUID(), tool, topic: topic.trim(), format: quizFormat, source, sourceA, sourceB, result: response }, ...saved].slice(0, 12));
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -170,6 +190,13 @@ export function StudyWorkspace({ revision }: { revision: number }) {
     label: document.source_file,
   }));
 
+  const exportResult = () => {
+    if (!result) return;
+    const body = "items" in result ? result.items.map((item, i) => `## ${i + 1}. ${item.question}\n\n${item.options?.map(o => `- ${o}`).join("\n") || ""}\n\nAnswer: ${item.answer}\n\n${item.explanation || ""} [${item.citation_marker}]`).join("\n\n") : (result.summary || result.comparison || "");
+    const references = evidence.map((e, i) => `[${i + 1}] ${e.chunk.source_file}: ${e.chunk.text}`).join("\n\n");
+    const url = URL.createObjectURL(new Blob([`# ${resultTopic}\n\n${body}\n\n## Sources\n\n${references}`], { type: "text/markdown" }));
+    const link = document.createElement("a"); link.href = url; link.download = `verity-${tool}.md`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
   return (
     <div className="workspace-page tools-workspace">
       <div className="page-heading">
@@ -224,6 +251,7 @@ export function StudyWorkspace({ revision }: { revision: number }) {
       >
         <form onSubmit={run} className="study-controls">
           <h2>{active.title}</h2>
+
           <fieldset disabled={loading} className="study-fields">
             <label>
               Topic
@@ -328,6 +356,10 @@ export function StudyWorkspace({ revision }: { revision: number }) {
               <p>{error}</p>
             </div>
           )}
+          {saved.length > 0 && <details className="saved-studies"><summary>Saved sessions ({saved.length})</summary><div className="saved-studies-content"><SelectField label="Saved study sessions" value="" placeholder="Reopen a saved session" disabled={loading} options={saved.map(s => ({ value: s.id, label: `${s.tool === "quiz" ? s.format : s.tool}: ${s.topic}` }))} onValueChange={id => {
+            const session = saved.find(s => s.id === id); if (!session) return;
+            setTool(session.tool); setTopic(session.topic); setResultTopic(session.topic); setQuizFormat(session.format); setResultFormat(session.format); setSource(session.source); setSourceA(session.sourceA); setSourceB(session.sourceB); setResult(session.result); setSessionKey(key => key + 1); setError("");
+          }} /><p className="state-text">Last 12 results saved in this browser. Practice restarts when reopened.</p><Button type="button" variant="ghost" size="sm" onClick={() => store([])}>Clear saved sessions</Button></div></details>}
         </form>
         <div className="study-result" aria-busy={loading}>
           {loading ? (
@@ -345,9 +377,10 @@ export function StudyWorkspace({ revision }: { revision: number }) {
             </div>
           ) : result ? (
             <>
+              <div className="practice-toolbar"><p className="study-result-topic">{resultTopic}</p><Button variant="outline" size="sm" onClick={exportResult}>Export Markdown</Button></div>
               <div className="study-result-heading">
                 <h2>
-                  {isQuiz ? `${result.items.length} questions` : active.title}
+                  {isQuiz ? `${result.items.length} ${resultFormat === "flashcard" ? "flashcards" : "questions"}` : active.title}
                 </h2>
                 <span>
                   {isQuiz
@@ -355,77 +388,9 @@ export function StudyWorkspace({ revision }: { revision: number }) {
                     : `${evidence.length} evidence passages`}
                 </span>
               </div>
+              {isQuiz && result.dropped > 0 && <p className="state-text">{result.dropped} duplicate or invalid items were omitted.</p>}
               {isQuiz ? (
-                <section aria-label="Practice questions">
-                  {result.items.map((item, index) => {
-                    const shown = revealed.has(index);
-                    return (
-                      <article
-                        className="quiz-item"
-                        key={`${item.question}-${index}`}
-                      >
-                        <div className="quiz-question">
-                          <span>{index + 1}.</span>
-                          <h3>{item.question}</h3>
-                        </div>
-                        {item.options && (
-                          <div className="quiz-options">
-                            {item.options.map((option, optionIndex) => (
-                              <div
-                                key={option}
-                                className={cn(
-                                  "quiz-option",
-                                  shown && option === item.answer && "correct",
-                                )}
-                              >
-                                <span>
-                                  {String.fromCharCode(65 + optionIndex)}
-                                </span>
-                                {option}
-                                {shown && option === item.answer && (
-                                  <Check size={14} className="shrink-0" />
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {shown && (
-                          <div className="quiz-answer">
-                            <p className="font-medium">{item.answer}</p>
-                            {item.explanation && <p>{item.explanation}</p>}
-                          </div>
-                        )}
-                        <div className="quiz-actions">
-                          <span>
-                            {item.citation_marker
-                              ? `Source [${item.citation_marker}]`
-                              : "No citation recorded"}
-                          </span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              setRevealed((current) => {
-                                const next = new Set(current);
-                                if (shown) next.delete(index);
-                                else next.add(index);
-                                return next;
-                              })
-                            }
-                          >
-                            {shown ? (
-                              <RotateCcw size={14} />
-                            ) : (
-                              <ChevronDown size={14} />
-                            )}
-                            {shown ? "Hide answer" : "Reveal answer"}
-                          </Button>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </section>
+                <PracticeSession key={sessionKey} result={result as QuizResponse} format={resultFormat} />
               ) : (
                 <article>
                   <RichText evidence={evidence}>
@@ -453,7 +418,7 @@ export function StudyWorkspace({ revision }: { revision: number }) {
             <div className="study-empty">
               <active.icon size={24} strokeWidth={1.5} />
               <h2>
-                {documents.length ? "No result yet" : "No sources available"}
+                {documents.length ? "Choose a topic to begin" : "Add sources in the library to begin"}
               </h2>
             </div>
           )}
