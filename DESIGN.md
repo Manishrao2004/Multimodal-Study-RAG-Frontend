@@ -320,3 +320,29 @@ quiet filename/back toolbar and a document stage that fills the remaining viewpo
 it does not use browser fullscreen or an expanded sheet. Controls wrap on narrow
 screens and the page stage owns scrolling. Source documents remain local.
 
+
+
+## Active study sessions and screenshot questions
+
+Study results retain the existing controls/result layout. The last twelve generated
+results are stored in browser local storage and can be reopened or exported as
+Markdown with source passages. Reopening starts a fresh practice attempt; answer
+progress is not persisted. MCQs use selectable options and explicit checking,
+short answers use a written draft and self assessment, and flashcards use a
+keyboard operable flip surface with a missed-card review queue. Feedback uses the
+existing success and destructive tokens. Empty generated sets explain recovery.
+
+The composer accepts dropped and pasted images and offers a screen capture button.
+Screen sharing stops after a frame is captured. Source lookup and optional library
+saving appear with the image preview. Existing conversation persistence and
+question-aware vision endpoints remain in use.
+
+Verification: source review, TypeScript, lint, build, and focused backend tests.
+The browser access host was unavailable, so desktop/mobile visual review and the
+native screen picker were not exercised in this session.
+
+
+Study controls explicitly reset the fieldset's intrinsic minimum width so long
+source filenames stay within the control column. Select values shrink and truncate;
+full filenames remain available in the selection menu. Saved sessions sit in a
+collapsed disclosure below the generation action to keep the topic form primary.

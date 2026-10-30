@@ -23,6 +23,7 @@ import {
   History,
   LoaderCircle,
   MessageSquare,
+  MonitorUp,
   MoreHorizontal,
   Paperclip,
   Pencil,
@@ -274,6 +275,8 @@ export function AskWorkspace({
   const [loading, setLoading] = useState(false);
   const [pendingQuestion, setPendingQuestion] = useState("");
   const [failure, setFailure] = useState("");
+  const [capturing, setCapturing] = useState(false);
+  const captureRef = useRef(false);
   const [image, setImage] = useState<File | null>(null);
   const preview = useMemo(
     () => (image ? URL.createObjectURL(image) : null),
@@ -389,16 +392,51 @@ export function AskWorkspace({
   }, [query]);
 
   const attach = (file: File | undefined) => {
-    if (!file) return;
+    if (!file || busyRef.current) return;
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
       toast.error("Choose a PNG, JPEG, or WebP image.");
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
+    if (file.size > 10_000_000) {
       toast.error("Choose an image smaller than 10 MB.");
       return;
     }
     setImage(file);
+  };
+  const captureScreen = async () => {
+    if (busyRef.current || captureRef.current) return;
+    if (!navigator.mediaDevices?.getDisplayMedia) { toast.error("Screen capture is unavailable here. Paste or attach a screenshot instead."); return; }
+    captureRef.current = true;
+    setCapturing(true);
+    let stream: MediaStream | undefined;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      const video = document.createElement("video");
+      video.srcObject = stream;
+      video.muted = true;
+      await video.play();
+      await new Promise<void>((resolve, reject) => {
+        const timer = window.setTimeout(() => reject(new Error("The screen capture did not become ready. Try attaching a screenshot.")), 5000);
+        video.requestVideoFrameCallback(() => { clearTimeout(timer); resolve(); });
+      });
+      const canvas = document.createElement("canvas");
+      const scale = Math.min(1, 4096 / Math.max(video.videoWidth, video.videoHeight));
+      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Could not create a screen capture.");
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/png"));
+      if (!blob) throw new Error("Could not create a screen capture.");
+      attach(new File([blob], "screen-capture.png", { type: "image/png" }));
+      textareaRef.current?.focus();
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "NotAllowedError")) toast.error(errorMessage(error));
+    } finally {
+      stream?.getTracks().forEach(track => track.stop());
+      captureRef.current = false;
+      setCapturing(false);
+    }
   };
   const newChat = () => {
     if (busyRef.current) return;
@@ -434,7 +472,7 @@ export function AskWorkspace({
   const submit = async (event?: FormEvent) => {
     event?.preventDefault();
     const question = query.trim();
-    if (!question || busyRef.current || initializing || connectionError) return;
+    if (!question || busyRef.current || captureRef.current || initializing || connectionError) return;
     if (!image && scope === "sources_only" && !indexReady) {
       setFailure("Add a source to your library before using My sources.");
       return;
@@ -818,6 +856,8 @@ export function AskWorkspace({
           <form
             onSubmit={submit}
             className="chat-composer"
+            onDragOver={event => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
+            onDrop={event => { event.preventDefault(); attach(event.dataTransfer.files[0]); }}
             onPaste={(event) => {
               const file = Array.from(event.clipboardData.files).find((item) =>
                 item.type.startsWith("image/"),
@@ -842,6 +882,11 @@ export function AskWorkspace({
                 </button>
               </div>
             )}
+            {image && <div className="screenshot-options">
+              <label><input type="checkbox" checked={useKnowledgeBase} disabled={loading} onChange={e => setUseKnowledgeBase(e.target.checked)} /> Use my sources</label>
+              <label><input type="checkbox" checked={saveImage} disabled={loading} onChange={e => setSaveImage(e.target.checked)} /> Save image to library</label>
+              <p>Ask a question about the preview, then send.</p>
+            </div>}
             <textarea
               ref={textareaRef}
               aria-label="Message"
@@ -851,7 +896,7 @@ export function AskWorkspace({
               maxLength={4000}
               rows={2}
               placeholder={
-                image ? "Ask about this image..." : "Ask a question..."
+                image ? "Ask about this image..." : "Ask a question, or paste a screenshot..."
               }
               onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
                 if (
@@ -886,6 +931,7 @@ export function AskWorkspace({
               >
                 <Paperclip />
               </Button>
+              <Button type="button" variant="ghost" size="icon-sm" disabled={loading || capturing} onClick={() => void captureScreen()} title="Capture screen" aria-label="Capture screen">{capturing ? <LoaderCircle className="animate-spin" /> : <MonitorUp />}</Button>
               <Select
                 value={scope}
                 disabled={loading || Boolean(image)}
@@ -923,15 +969,13 @@ export function AskWorkspace({
                   ))}
                 </SelectContent>
               </Select>
-              {image && (
-                <span className="text-xs text-ink-muted">Image question</span>
-              )}
+              {image && <span className="text-xs text-ink-muted">Image question</span>}
               <Button
                 type="submit"
                 size="icon-sm"
                 className="ml-auto"
                 disabled={
-                  loading ||
+                  loading || capturing ||
                   initializing ||
                   Boolean(connectionError) ||
                   !query.trim()
