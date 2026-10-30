@@ -67,6 +67,48 @@ export interface AskResponse {
   answer_basis: AnswerBasis;
   evidence_sufficiency: EvidenceSufficiency;
   provenance_notice: string | null;
+  evidence_method?: "edurag" | "adaptive" | "aspect";
+  evidence_map?: AspectEvidence[];
+  evidence_check_status?: "completed" | "unavailable" | "not_checked";
+  evidence_check_reason?: string | null;
+  supported_aspects?: string[];
+  missing_aspects?: string[];
+  claim_verification?: {
+    status: "completed" | "unavailable" | "not_checked";
+    repair_attempted: boolean;
+    withheld: boolean;
+    fallback_used?: boolean;
+    fallback_kind?: "supported_claims" | "source_excerpts" | null;
+    released_claim_ids?: string[];
+    failure_type?: string | null;
+    reason: string | null;
+    claims: VerifiedClaim[];
+    initial_claims: VerifiedClaim[];
+  };
+}
+
+export interface EvidenceQuote {
+  chunk_id: string;
+  quote: string;
+}
+
+export interface AspectEvidence {
+  aspect_id: string;
+  aspect: string;
+  status: "supported" | "partial" | "missing" | "conflicting" | "not_checked";
+  supports: EvidenceQuote[];
+  conflicts: EvidenceQuote[];
+  reason: string;
+}
+
+export interface VerifiedClaim {
+  claim_id: string;
+  text: string;
+  provenance: "source" | "derived" | "background";
+  status: "supported" | "unsupported" | "contradicted" | "not_checked";
+  citation_markers: number[];
+  supports: EvidenceQuote[];
+  reason: string;
 }
 
 export interface ConversationTurn {

@@ -23,7 +23,6 @@ import {
   History,
   LoaderCircle,
   MessageSquare,
-  MonitorUp,
   MoreHorizontal,
   Paperclip,
   Pencil,
@@ -70,6 +69,7 @@ import {
 import { EvidencePanel } from "@/components/workbench/evidence-panel";
 import { RichText } from "@/components/workbench/rich-text";
 import { SelectField } from "@/components/workbench/select-field";
+import { AnswerCoverage } from "@/components/workbench/answer-coverage";
 
 type Answer = AskResponse | ScreenshotAskResponse;
 const scopes: { value: AnswerScope; label: string }[] = [
@@ -123,7 +123,13 @@ function AnswerMessage({ message }: { message: StoredMessage }) {
           )}
         />
         <span>
-          {basis === "model"
+          {result && isAsk(result) && result.claim_verification?.fallback_kind === "supported_claims"
+            ? "Supported source content"
+            : result && isAsk(result) && result.claim_verification?.fallback_used
+            ? "Source excerpts"
+            : result && isAsk(result) && result.claim_verification?.withheld
+            ? "Source answer withheld"
+            : basis === "model"
             ? "General knowledge"
             : basis === "mixed"
               ? "Sources + general knowledge"
@@ -144,6 +150,9 @@ function AnswerMessage({ message }: { message: StoredMessage }) {
           {message.content}
         </RichText>
       </div>
+      {result && isAsk(result) && (
+        <AnswerCoverage result={result} onCitationClick={showCitation} />
+      )}
       {result &&
         isAsk(result) &&
         result.provenance_notice &&
@@ -275,8 +284,6 @@ export function AskWorkspace({
   const [loading, setLoading] = useState(false);
   const [pendingQuestion, setPendingQuestion] = useState("");
   const [failure, setFailure] = useState("");
-  const [capturing, setCapturing] = useState(false);
-  const captureRef = useRef(false);
   const [image, setImage] = useState<File | null>(null);
   const preview = useMemo(
     () => (image ? URL.createObjectURL(image) : null),
@@ -403,41 +410,6 @@ export function AskWorkspace({
     }
     setImage(file);
   };
-  const captureScreen = async () => {
-    if (busyRef.current || captureRef.current) return;
-    if (!navigator.mediaDevices?.getDisplayMedia) { toast.error("Screen capture is unavailable here. Paste or attach a screenshot instead."); return; }
-    captureRef.current = true;
-    setCapturing(true);
-    let stream: MediaStream | undefined;
-    try {
-      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-      const video = document.createElement("video");
-      video.srcObject = stream;
-      video.muted = true;
-      await video.play();
-      await new Promise<void>((resolve, reject) => {
-        const timer = window.setTimeout(() => reject(new Error("The screen capture did not become ready. Try attaching a screenshot.")), 5000);
-        video.requestVideoFrameCallback(() => { clearTimeout(timer); resolve(); });
-      });
-      const canvas = document.createElement("canvas");
-      const scale = Math.min(1, 4096 / Math.max(video.videoWidth, video.videoHeight));
-      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
-      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
-      const context = canvas.getContext("2d");
-      if (!context) throw new Error("Could not create a screen capture.");
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/png"));
-      if (!blob) throw new Error("Could not create a screen capture.");
-      attach(new File([blob], "screen-capture.png", { type: "image/png" }));
-      textareaRef.current?.focus();
-    } catch (error) {
-      if (!(error instanceof DOMException && error.name === "NotAllowedError")) toast.error(errorMessage(error));
-    } finally {
-      stream?.getTracks().forEach(track => track.stop());
-      captureRef.current = false;
-      setCapturing(false);
-    }
-  };
   const newChat = () => {
     if (busyRef.current) return;
     selectionRef.current++;
@@ -472,7 +444,7 @@ export function AskWorkspace({
   const submit = async (event?: FormEvent) => {
     event?.preventDefault();
     const question = query.trim();
-    if (!question || busyRef.current || captureRef.current || initializing || connectionError) return;
+    if (!question || busyRef.current || initializing || connectionError) return;
     if (!image && scope === "sources_only" && !indexReady) {
       setFailure("Add a source to your library before using My sources.");
       return;
@@ -931,7 +903,6 @@ export function AskWorkspace({
               >
                 <Paperclip />
               </Button>
-              <Button type="button" variant="ghost" size="icon-sm" disabled={loading || capturing} onClick={() => void captureScreen()} title="Capture screen" aria-label="Capture screen">{capturing ? <LoaderCircle className="animate-spin" /> : <MonitorUp />}</Button>
               <Select
                 value={scope}
                 disabled={loading || Boolean(image)}
@@ -975,7 +946,7 @@ export function AskWorkspace({
                 size="icon-sm"
                 className="ml-auto"
                 disabled={
-                  loading || capturing ||
+                  loading ||
                   initializing ||
                   Boolean(connectionError) ||
                   !query.trim()

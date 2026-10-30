@@ -332,17 +332,31 @@ short answers use a written draft and self assessment, and flashcards use a
 keyboard operable flip surface with a missed-card review queue. Feedback uses the
 existing success and destructive tokens. Empty generated sets explain recovery.
 
-The composer accepts dropped and pasted images and offers a screen capture button.
-Screen sharing stops after a frame is captured. Source lookup and optional library
-saving appear with the image preview. Existing conversation persistence and
+The composer accepts uploaded, dropped, and pasted images. Source lookup and
+optional library saving appear with the image preview. Existing conversation persistence and
 question-aware vision endpoints remain in use.
 
 Verification: source review, TypeScript, lint, build, and focused backend tests.
-The browser access host was unavailable, so desktop/mobile visual review and the
-native screen picker were not exercised in this session.
+The browser access host was unavailable, so desktop/mobile visual review was
+not exercised in this session.
 
 
 Study controls explicitly reset the fieldset's intrinsic minimum width so long
 source filenames stay within the control column. Select values shrink and truncate;
 full filenames remain available in the selection menu. Saved sessions sit in a
 collapsed disclosure below the generation action to keep the topic form primary.
+
+## Question coverage and source-claim checks
+
+Text answers can disclose "Coverage of your question" beneath the answer.
+Each requested aspect has a plain-language support state, an assessment reason,
+and quoted evidence with source inspection. Quiet separators and wrapping rows
+preserve the existing reading hierarchy on narrow screens. Supported states use
+the success token; partial/conflicting states use warning. Missing support uses
+muted text without an invented confidence percentage.
+
+A separate collapsed source-claim check explains model-assisted verification,
+one optional revision, and withheld source content. General-knowledge content
+is explicitly outside that check. Old saved answers omit these disclosures
+when the metadata is absent. TypeScript, lint and production build passed;
+browser access was unavailable for live visual review in this session.
