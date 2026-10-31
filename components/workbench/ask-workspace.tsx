@@ -123,7 +123,9 @@ function AnswerMessage({ message }: { message: StoredMessage }) {
           )}
         />
         <span>
-          {result && isAsk(result) && result.claim_verification?.fallback_kind === "supported_claims"
+          {result && isAsk(result) && result.claim_verification?.status === "unavailable" && !result.claim_verification?.withheld
+            ? "Source answer · unverified"
+            : result && isAsk(result) && result.claim_verification?.fallback_kind === "supported_claims"
             ? "Supported source content"
             : result && isAsk(result) && result.claim_verification?.fallback_used
             ? "Source excerpts"
@@ -156,7 +158,7 @@ function AnswerMessage({ message }: { message: StoredMessage }) {
       {result &&
         isAsk(result) &&
         result.provenance_notice &&
-        basis !== "sources" && (
+        (basis !== "sources" || result.claim_verification?.status === "unavailable") && (
           <details className="answer-provenance">
             <summary>Answer provenance</summary>
             <p>{result.provenance_notice}</p>
