@@ -384,7 +384,7 @@ export function StudyWorkspace({ revision }: { revision: number }) {
                 </h2>
                 <span>
                   {isQuiz
-                    ? `${Math.round(result.grounded_rate * 100)}% grounded`
+                    ? `${Math.round(result.grounded_rate * 100)}% retained after checks`
                     : `${evidence.length} evidence passages`}
                 </span>
               </div>
@@ -404,7 +404,7 @@ export function StudyWorkspace({ revision }: { revision: number }) {
                     </span>
                     {study?.grounding_ratio != null && (
                       <span>
-                        {Math.round(study.grounding_ratio * 100)}% grounded
+                        {Math.round(study.grounding_ratio * 100)}% token match
                       </span>
                     )}
                   </div>

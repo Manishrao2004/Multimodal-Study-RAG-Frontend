@@ -23,6 +23,21 @@ Open `http://localhost:5173`.
 - Citation-grounded summaries and source comparisons
 - Traceable MCQ, short-answer, and flashcard generation
 
+## Answer modes and checking
+
+In chat, **Auto** chooses between source-based, mixed, and general-knowledge
+answers; **My sources** restricts the answer to uploaded material; **General
+knowledge** does not retrieve documents. The backend normally uses its
+`aspect` evidence method for source-aware chat. This is an internal checking
+process, not a model or a frontend mode. It can withhold claims or show
+excerpts when verification fails. Checks are model-assisted and can be wrong.
+
+Summaries, comparisons, quizzes, flashcards, and screenshot questions have
+separate generation paths; they do not currently use the complete chat claim
+audit. Citation markers and grounding indicators are not proof of factuality.
+Study sessions are saved only in this browser (up to 12); reopening a practice
+session starts practice again. Chat conversations are stored by the backend.
+
 ## Conversations
 
 Conversation transcripts and complete answer metadata are persisted by the
