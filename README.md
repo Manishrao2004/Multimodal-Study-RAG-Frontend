@@ -29,8 +29,9 @@ In chat, **Auto** chooses between source-based, mixed, and general-knowledge
 answers; **My sources** restricts the answer to uploaded material; **General
 knowledge** does not retrieve documents. The backend normally uses its
 `aspect` evidence method for source-aware chat. This is an internal checking
-process, not a model or a frontend mode. It can withhold claims or show
-excerpts when verification fails. Checks are model-assisted and can be wrong.
+process, not a model or a frontend mode. When claim verification is enabled,
+it can withhold claims or show excerpts when verification fails. The backend's
+configuration can disable that audit; checks are model-assisted and can be wrong.
 
 Summaries, comparisons, quizzes, flashcards, and screenshot questions have
 separate generation paths; they do not currently use the complete chat claim
